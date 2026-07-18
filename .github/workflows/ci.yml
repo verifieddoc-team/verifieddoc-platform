@@ -8,6 +8,25 @@ on:
 jobs:
   api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: verifieddoc
+          POSTGRES_PASSWORD: verifieddoc
+          POSTGRES_DB: verifieddoc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verifieddoc -d verifieddoc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://verifieddoc:verifieddoc@localhost:5432/verifieddoc
+      JWT_ACCESS_SECRET: ci-access-secret-with-at-least-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-with-at-least-32-characters
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,6 +34,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run db:generate --workspace=@verifieddoc/api
+      - run: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
