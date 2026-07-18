@@ -1,6 +1,9 @@
+import jwt from "jsonwebtoken";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
+import { env } from "../src/config/env.js";
+import { JWT_AUDIENCE, JWT_ISSUER } from "../src/lib/tokens.js";
 import {
   cleanupTestUsers,
   createRegisterPayload,
@@ -183,5 +186,97 @@ describe("Authentication", () => {
 
     expect(activeTokenResponse.status).toBe(401);
     expect(activeTokenResponse.body.error.code).toBe("INVALID_CREDENTIALS");
+  });
+
+  it("allows only one concurrent refresh rotation and revokes the token family", async () => {
+    const registerResponse = await request(app).post("/api/v1/auth/register").send(createRegisterPayload());
+    const refreshToken = registerResponse.body.refreshToken as string;
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      request(app).post("/api/v1/auth/refresh").send({ refreshToken }),
+      request(app).post("/api/v1/auth/refresh").send({ refreshToken })
+    ]);
+
+    const statuses = [firstResponse.status, secondResponse.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 401]);
+
+    const successResponse = firstResponse.status === 200 ? firstResponse : secondResponse;
+    const failureResponse = firstResponse.status === 401 ? firstResponse : secondResponse;
+
+    expect(failureResponse.body.error.code).toBe("INVALID_CREDENTIALS");
+    expect(successResponse.body.refreshToken).toEqual(expect.any(String));
+    expect(successResponse.body.refreshToken).not.toBe(refreshToken);
+
+    const originalReuseResponse = await request(app).post("/api/v1/auth/refresh").send({ refreshToken });
+    expect(originalReuseResponse.status).toBe(401);
+    expect(originalReuseResponse.body.error.code).toBe("INVALID_CREDENTIALS");
+
+    const replacementReuseResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: successResponse.body.refreshToken });
+
+    expect(replacementReuseResponse.status).toBe(401);
+    expect(replacementReuseResponse.body.error.code).toBe("INVALID_CREDENTIALS");
+  });
+
+  it("handles concurrent duplicate registration safely", async () => {
+    const sharedEmail = createTestEmail("concurrent-register");
+    const payloads = [
+      createRegisterPayload({ email: sharedEmail, firstName: "Alpha" }),
+      createRegisterPayload({ email: sharedEmail.toUpperCase(), firstName: "Beta" })
+    ];
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      request(app).post("/api/v1/auth/register").send(payloads[0]),
+      request(app).post("/api/v1/auth/register").send(payloads[1])
+    ]);
+
+    const statuses = [firstResponse.status, secondResponse.status];
+    expect(statuses).toContain(201);
+    expect(statuses).toContain(409);
+    expect(statuses.every((status) => status !== 500)).toBe(true);
+
+    const conflictResponse = firstResponse.status === 409 ? firstResponse : secondResponse;
+    expect(conflictResponse.body.error).toMatchObject({
+      code: "EMAIL_ALREADY_EXISTS"
+    });
+  });
+
+  it("rejects access tokens with invalid issuer or audience", async () => {
+    const payload = createRegisterPayload();
+    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const tokenPayload = {
+      sub: registerResponse.body.user.id as string,
+      email: payload.email,
+      role: registerResponse.body.user.role as string
+    };
+
+    const invalidIssuerToken = jwt.sign(tokenPayload, env.JWT_ACCESS_SECRET, {
+      expiresIn: "15m",
+      algorithm: "HS256",
+      issuer: "wrong-issuer",
+      audience: JWT_AUDIENCE
+    });
+
+    const invalidIssuerResponse = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Authorization", `Bearer ${invalidIssuerToken}`);
+
+    expect(invalidIssuerResponse.status).toBe(401);
+    expect(invalidIssuerResponse.body.error.code).toBe("UNAUTHORIZED");
+
+    const invalidAudienceToken = jwt.sign(tokenPayload, env.JWT_ACCESS_SECRET, {
+      expiresIn: "15m",
+      algorithm: "HS256",
+      issuer: JWT_ISSUER,
+      audience: "wrong-audience"
+    });
+
+    const invalidAudienceResponse = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Authorization", `Bearer ${invalidAudienceToken}`);
+
+    expect(invalidAudienceResponse.status).toBe(401);
+    expect(invalidAudienceResponse.body.error.code).toBe("UNAUTHORIZED");
   });
 });

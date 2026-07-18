@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import type { User } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
+import { isUniqueConstraintError } from "../../lib/prisma-errors.js";
 import { prisma } from "../../lib/prisma.js";
 import {
   createAccessToken,
@@ -13,6 +14,13 @@ import type { LoginInput, LogoutInput, RefreshInput, RegisterInput } from "./aut
 
 const BCRYPT_ROUNDS = 12;
 const INVALID_CREDENTIALS_MESSAGE = "Invalid email or password";
+
+class RefreshTokenClaimError extends Error {
+  constructor() {
+    super("Refresh token claim failed");
+    this.name = "RefreshTokenClaimError";
+  }
+}
 
 export interface AuthSession {
   user: PublicUser;
@@ -35,6 +43,18 @@ function buildSession(user: User, refreshToken: string): AuthSession {
     }),
     refreshToken
   };
+}
+
+async function revokeActiveRefreshTokens(userId: string) {
+  await prisma.refreshToken.updateMany({
+    where: {
+      userId,
+      revokedAt: null
+    },
+    data: {
+      revokedAt: new Date()
+    }
+  });
 }
 
 async function createRefreshTokenRecord(userId: string, context: SessionContext) {
@@ -65,15 +85,24 @@ export async function registerUser(input: RegisterInput, context: SessionContext
 
   const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
 
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      passwordHash,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      role: input.role
+  let user: User;
+  try {
+    user = await prisma.user.create({
+      data: {
+        email: input.email,
+        passwordHash,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        role: input.role
+      }
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error, ["email"])) {
+      throw new AppError(409, "EMAIL_ALREADY_EXISTS", "An account with this email already exists");
     }
-  });
+
+    throw error;
+  }
 
   const refreshToken = await createRefreshTokenRecord(user.id, context);
   return buildSession(user, refreshToken);
@@ -108,15 +137,7 @@ export async function refreshSession(input: RefreshInput, context: SessionContex
   }
 
   if (storedToken.revokedAt) {
-    await prisma.refreshToken.updateMany({
-      where: {
-        userId: storedToken.userId,
-        revokedAt: null
-      },
-      data: {
-        revokedAt: new Date()
-      }
-    });
+    await revokeActiveRefreshTokens(storedToken.userId);
     throw new AppError(401, "INVALID_CREDENTIALS", INVALID_CREDENTIALS_MESSAGE);
   }
 
@@ -139,25 +160,41 @@ export async function refreshSession(input: RefreshInput, context: SessionContex
   const nextRefreshToken = generateRefreshToken();
   const nextTokenHash = hashToken(nextRefreshToken);
 
-  await prisma.$transaction(async (tx) => {
-    const replacement = await tx.refreshToken.create({
-      data: {
-        tokenHash: nextTokenHash,
-        userId: user.id,
-        expiresAt: getRefreshTokenExpiry(),
-        userAgent: context.userAgent,
-        ipAddress: context.ipAddress
-      }
-    });
+  try {
+    await prisma.$transaction(async (tx) => {
+      const replacement = await tx.refreshToken.create({
+        data: {
+          tokenHash: nextTokenHash,
+          userId: user.id,
+          expiresAt: getRefreshTokenExpiry(),
+          userAgent: context.userAgent,
+          ipAddress: context.ipAddress
+        }
+      });
 
-    await tx.refreshToken.update({
-      where: { id: storedToken.id },
-      data: {
-        revokedAt: new Date(),
-        replacedByTokenId: replacement.id
+      const claimResult = await tx.refreshToken.updateMany({
+        where: {
+          id: storedToken.id,
+          revokedAt: null
+        },
+        data: {
+          revokedAt: new Date(),
+          replacedByTokenId: replacement.id
+        }
+      });
+
+      if (claimResult.count !== 1) {
+        throw new RefreshTokenClaimError();
       }
     });
-  });
+  } catch (error) {
+    if (error instanceof RefreshTokenClaimError) {
+      await revokeActiveRefreshTokens(storedToken.userId);
+      throw new AppError(401, "INVALID_CREDENTIALS", INVALID_CREDENTIALS_MESSAGE);
+    }
+
+    throw error;
+  }
 
   return buildSession(user, nextRefreshToken);
 }
