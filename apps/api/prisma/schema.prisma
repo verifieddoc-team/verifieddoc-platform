@@ -39,8 +39,28 @@ model User {
   issued          Credential[]         @relation("CredentialIssuer")
   shareLinks      ShareLink[]
   auditLogs       AuditLog[]           @relation("AuditActor")
+  refreshTokens  RefreshToken[]
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
+}
+
+model RefreshToken {
+  id                String         @id @default(cuid())
+  tokenHash         String         @unique
+  userId            String
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?
+  createdAt         DateTime       @default(now())
+  userAgent         String?
+  ipAddress         String?
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy        RefreshToken?  @relation("TokenReplacement", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replacedTokens    RefreshToken[] @relation("TokenReplacement")
+
+  @@index([userId, revokedAt])
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
 }
 
 model Organization {
