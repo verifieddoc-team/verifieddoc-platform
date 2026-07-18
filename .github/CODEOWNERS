@@ -1,0 +1,6 @@
+* @verifieddoc-team/backend-leads @verifieddoc-team/project-leads
+/apps/api/ @verifieddoc-team/backend
+/apps/web/ @verifieddoc-team/frontend
+/apps/mobile/ @verifieddoc-team/mobile
+/docs/ @verifieddoc-team/technical-writing
+/design/ @verifieddoc-team/design

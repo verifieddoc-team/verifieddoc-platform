@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlatformRole {
+  HOLDER
+  VERIFIER
+  ORGANIZATION_ADMIN
+  ORGANIZATION_ISSUER
+  PLATFORM_ADMIN
+}
+
+enum OrganizationStatus {
+  PENDING
+  VERIFIED
+  SUSPENDED
+}
+
+enum CredentialStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+model User {
+  id             String               @id @default(cuid())
+  email          String               @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           PlatformRole         @default(HOLDER)
+  memberships    OrganizationMember[]
+  credentials    Credential[]         @relation("CredentialHolder")
+  issued          Credential[]         @relation("CredentialIssuer")
+  shareLinks      ShareLink[]
+  auditLogs       AuditLog[]           @relation("AuditActor")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+}
+
+model Organization {
+  id          String               @id @default(cuid())
+  name        String
+  slug        String               @unique
+  emailDomain String?
+  status      OrganizationStatus   @default(PENDING)
+  members     OrganizationMember[]
+  credentials Credential[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           PlatformRole
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+}
+
+model Credential {
+  id             String           @id @default(cuid())
+  publicId       String           @unique @default(cuid())
+  title          String
+  description    String?
+  credentialType String
+  referenceNo    String
+  status         CredentialStatus @default(ACTIVE)
+  issuedAt       DateTime
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  revocationNote String?
+  metadata       Json?
+  organizationId String
+  holderId       String
+  issuedById     String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  holder         User             @relation("CredentialHolder", fields: [holderId], references: [id])
+  issuedBy       User             @relation("CredentialIssuer", fields: [issuedById], references: [id])
+  shareLinks     ShareLink[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([organizationId, referenceNo])
+  @@index([holderId, status])
+}
+
+model ShareLink {
+  id           String     @id @default(cuid())
+  tokenHash    String     @unique
+  credentialId String
+  createdById  String
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  maxViews     Int?
+  viewCount    Int        @default(0)
+  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  createdBy    User       @relation(fields: [createdById], references: [id])
+  createdAt    DateTime   @default(now())
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  action       String
+  resourceType String
+  resourceId   String?
+  ipAddress    String?
+  userAgent    String?
+  details      Json?
+  actor        User?    @relation("AuditActor", fields: [actorId], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([resourceType, resourceId])
+  @@index([actorId, createdAt])
+}
