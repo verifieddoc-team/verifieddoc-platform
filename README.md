@@ -21,13 +21,94 @@ VerifiedDoc is an employer and organization credential verification platform. Au
 
 ## Start the API
 
-```bash
+### Windows PowerShell
+
+```powershell
 npm install
-cp apps/api/.env.example apps/api/.env
+Copy-Item apps\api\.env.example apps\api\.env
+npm run db:generate --workspace=@verifieddoc/api
+npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
 npm run dev
 ```
 
-The API runs at `http://localhost:4000`. Health is at `/api/v1/health` and interactive API documentation is at `/docs`.
+Optional fictional demo seed:
+
+```powershell
+$env:ALLOW_DEMO_SEED = "true"
+$env:DEMO_PASSWORD = "DemoPass1!"
+npm run db:seed --workspace=@verifieddoc/api
+```
+
+Run tests:
+
+```powershell
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+### POSIX (bash/zsh)
+
+```bash
+npm install
+cp apps/api/.env.example apps/api/.env
+npm run db:generate --workspace=@verifieddoc/api
+npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+npm run dev
+```
+
+Optional fictional demo seed:
+
+```bash
+ALLOW_DEMO_SEED=true DEMO_PASSWORD='DemoPass1!' npm run db:seed --workspace=@verifieddoc/api
+```
+
+Run tests:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+## PostgreSQL
+
+Start a local PostgreSQL instance with a database matching `DATABASE_URL` in `apps/api/.env`. The default example uses:
+
+```text
+postgresql://verifieddoc:verifieddoc@localhost:5432/verifieddoc?schema=public
+```
+
+Apply migrations after generating Prisma Client:
+
+```bash
+npm run db:generate --workspace=@verifieddoc/api
+npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+```
+
+## API URLs
+
+- API base: `http://localhost:4000/api/v1`
+- Liveness: `http://localhost:4000/api/v1/health`
+- Readiness: `http://localhost:4000/api/v1/ready`
+- Swagger UI: `http://localhost:4000/docs`
+- OpenAPI JSON: `http://localhost:4000/openapi.json`
+
+## Platform admin bootstrap
+
+For controlled first-time platform admin creation:
+
+```bash
+ALLOW_ADMIN_BOOTSTRAP=true ADMIN_EMAIL=admin@example.test ADMIN_PASSWORD='AdminPass1!' npm run db:bootstrap-admin --workspace=@verifieddoc/api
+```
+
+Disable bootstrap immediately afterward by setting `ALLOW_ADMIN_BOOTSTRAP=false` or removing it from the environment.
+
+## Integration guide
+
+See [docs/API-INTEGRATION.md](docs/API-INTEGRATION.md) for authentication, roles, endpoint groups, pagination, sharing, invitations, and demo-data rules.
 
 ## Collaboration
 

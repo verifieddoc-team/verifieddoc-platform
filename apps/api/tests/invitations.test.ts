@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { OrganizationRole, OrganizationStatus, PlatformRole } from "@prisma/client";
-import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createApp, type CreateAppOptions } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
