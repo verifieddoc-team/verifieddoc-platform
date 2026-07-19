@@ -1,13 +1,25 @@
-import { randomUUID } from "node:crypto";
-import bcrypt from "bcryptjs";
-import { OrganizationRole, PlatformRole } from "@prisma/client";
+﻿import { randomUUID } from "node:crypto";
+import { OrganizationRole, PlatformRole, type User } from "@prisma/client";
 import type { Express } from "express";
 import request from "supertest";
 import { prisma } from "../../src/lib/prisma.js";
+import { createAccessToken } from "../../src/lib/tokens.js";
 
 export const TEST_PASSWORD = "TestPass1!";
+export const TEST_PASSWORD_HASH =
+  "$2b$12$lbemTRvb0SVepz7u4tc.Purr4dd3RXw9iOajEAtfN6XuZvhvja.m6";
 export const TEST_EMAIL_DOMAIN = "example.test";
 export const TEST_ORG_SLUG_PREFIX = "test-org";
+
+const testUserEmailFilter = {
+  endsWith: `@${TEST_EMAIL_DOMAIN}`
+};
+
+const testOrganizationFilter = {
+  slug: {
+    startsWith: TEST_ORG_SLUG_PREFIX
+  }
+};
 
 export function createTestEmail(label = "user"): string {
   return `${label}.${randomUUID()}@${TEST_EMAIL_DOMAIN}`.toLowerCase();
@@ -38,32 +50,113 @@ export function createOrganizationPayload(overrides: Record<string, unknown> = {
   };
 }
 
+export interface TestUserSession {
+  user: User;
+  accessToken: string;
+  payload: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    role?: PlatformRole;
+  };
+}
+
+export async function createTestUser(
+  overrides: {
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    role?: PlatformRole;
+  } = {}
+): Promise<TestUserSession> {
+  const email = overrides.email ?? createTestEmail("user");
+  const firstName = overrides.firstName ?? "Test";
+  const lastName = overrides.lastName ?? "User";
+  const role = overrides.role ?? PlatformRole.HOLDER;
+
+  const user = await prisma.user.create({
+    data: {
+      email,
+      passwordHash: TEST_PASSWORD_HASH,
+      firstName,
+      lastName,
+      role
+    }
+  });
+
+  return {
+    user,
+    accessToken: createAccessToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role
+    }),
+    payload: {
+      email,
+      password: TEST_PASSWORD,
+      firstName,
+      lastName,
+      role
+    }
+  };
+}
+
 export async function cleanupTestOrganizations() {
+  await prisma.shareLink.deleteMany({
+    where: {
+      credential: {
+        organization: testOrganizationFilter
+      }
+    }
+  });
+
   await prisma.credential.deleteMany({
     where: {
-      organization: {
-        slug: {
-          startsWith: TEST_ORG_SLUG_PREFIX
-        }
-      }
+      organization: testOrganizationFilter
+    }
+  });
+
+  await prisma.organizationInvitation.deleteMany({
+    where: {
+      organization: testOrganizationFilter
+    }
+  });
+
+  await prisma.organizationMember.deleteMany({
+    where: {
+      organization: testOrganizationFilter
     }
   });
 
   await prisma.organization.deleteMany({
-    where: {
-      slug: {
-        startsWith: TEST_ORG_SLUG_PREFIX
-      }
-    }
+    where: testOrganizationFilter
   });
 }
 
 export async function cleanupTestUsers() {
+  await prisma.auditLog.deleteMany({
+    where: {
+      actor: {
+        email: testUserEmailFilter
+      }
+    }
+  });
+
+  await prisma.organizationInvitation.deleteMany({
+    where: {
+      OR: [
+        { email: testUserEmailFilter },
+        { invitedBy: { email: testUserEmailFilter } },
+        { acceptedBy: { email: testUserEmailFilter } },
+        { revokedBy: { email: testUserEmailFilter } }
+      ]
+    }
+  });
+
   await prisma.user.deleteMany({
     where: {
-      email: {
-        endsWith: `@${TEST_EMAIL_DOMAIN}`
-      }
+      email: testUserEmailFilter
     }
   });
 }
@@ -94,25 +187,26 @@ export async function loginAndGetAccessToken(app: Express, email: string, passwo
 }
 
 export async function createPlatformAdmin() {
-  const email = createTestEmail("platform-admin");
-  const passwordHash = await bcrypt.hash(TEST_PASSWORD, 12);
-
-  return prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      firstName: "Platform",
-      lastName: "Admin",
-      role: PlatformRole.PLATFORM_ADMIN
-    }
-  });
+  return createTestUser({
+    email: createTestEmail("platform-admin"),
+    firstName: "Platform",
+    lastName: "Admin",
+    role: PlatformRole.PLATFORM_ADMIN
+  }).then((session) => session.user);
 }
 
-export async function createPlatformAdminSession(app: Express) {
-  const admin = await createPlatformAdmin();
-  const accessToken = await loginAndGetAccessToken(app, admin.email);
+export async function createPlatformAdminSession(_app?: Express) {
+  const session = await createTestUser({
+    email: createTestEmail("platform-admin"),
+    firstName: "Platform",
+    lastName: "Admin",
+    role: PlatformRole.PLATFORM_ADMIN
+  });
 
-  return { admin, accessToken };
+  return {
+    admin: session.user,
+    accessToken: session.accessToken
+  };
 }
 
 export async function applyForOrganization(app: Express, accessToken: string, overrides: Record<string, unknown> = {}) {

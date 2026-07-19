@@ -9,6 +9,7 @@ import { createHttpLoggerOptions, type LogCaptureStream } from "./lib/http-loggi
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { credentialRouter } from "./modules/credentials/credential.routes.js";
 import { adminOrganizationRouter, organizationRouter } from "./modules/organizations/organization.routes.js";
+import { invitationAcceptRouter } from "./modules/invitations/invitation.routes.js";
 import { shareLinkRouter, verifyRouter } from "./modules/share-links/share-link.routes.js";
 import { openApiDocument } from "./openapi.js";
 
@@ -32,6 +33,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use("/api/v1/credentials", credentialRouter);
   app.use("/api/v1/credentials/:credentialId/share-links", shareLinkRouter);
   app.use("/api/v1/verify", verifyRouter);
+  app.use("/api/v1/invitations", invitationAcceptRouter);
   app.use("/api/v1/organizations", organizationRouter);
   app.use("/api/v1/admin/organizations", adminOrganizationRouter);
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));

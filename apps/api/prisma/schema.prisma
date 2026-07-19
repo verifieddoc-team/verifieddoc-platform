@@ -47,6 +47,9 @@ model User {
   auditLogs       AuditLog[]           @relation("AuditActor")
   refreshTokens  RefreshToken[]
   reviewedOrganizations Organization[] @relation("OrganizationReviewer")
+  sentInvitations OrganizationInvitation[] @relation("InvitationInviter")
+  acceptedInvitations OrganizationInvitation[] @relation("InvitationAccepter")
+  revokedInvitations OrganizationInvitation[] @relation("InvitationRevoker")
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 }
@@ -85,6 +88,7 @@ model Organization {
   reviewedById       String?
   status             OrganizationStatus   @default(PENDING)
   members            OrganizationMember[]
+  invitations        OrganizationInvitation[]
   credentials        Credential[]
   reviewedBy         User?                @relation("OrganizationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   createdAt          DateTime             @default(now())
@@ -105,6 +109,32 @@ model OrganizationMember {
   createdAt      DateTime         @default(now())
 
   @@unique([organizationId, userId])
+}
+
+model OrganizationInvitation {
+  id             String           @id @default(cuid())
+  organizationId String
+  email          String
+  role           OrganizationRole
+  tokenHash      String           @unique
+  activeKey      String?          @unique
+  invitedById    String
+  acceptedById   String?
+  revokedById    String?
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy      User             @relation("InvitationInviter", fields: [invitedById], references: [id])
+  acceptedBy     User?            @relation("InvitationAccepter", fields: [acceptedById], references: [id], onDelete: SetNull)
+  revokedBy      User?            @relation("InvitationRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+  @@index([email])
+  @@index([expiresAt])
 }
 
 model Credential {
