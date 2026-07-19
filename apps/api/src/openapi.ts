@@ -678,17 +678,54 @@ export const openApiDocument = {
           member: { $ref: "#/components/schemas/OrganizationMemberProfile" }
         }
       },
+      SafeAuditLogEntry: {
+        type: "object",
+        required: ["id", "action", "resourceType", "resourceId", "organizationId", "actor", "ipAddress", "userAgent", "details", "createdAt"],
+        properties: {
+          id: { type: "string" },
+          action: { type: "string", example: "CREDENTIAL_ISSUED" },
+          resourceType: { type: "string", example: "Credential" },
+          resourceId: { type: "string", nullable: true },
+          organizationId: { type: "string", nullable: true },
+          actor: {
+            anyOf: [{ $ref: "#/components/schemas/PublicUser" }, { type: "null" }]
+          },
+          ipAddress: { type: "string", nullable: true },
+          userAgent: { type: "string", nullable: true },
+          details: {
+            type: "object",
+            nullable: true,
+            additionalProperties: true,
+            description: "Sanitized metadata. Passwords, tokens, hashes, authorization headers, cookies, and request bodies are never returned."
+          },
+          createdAt: { type: "string", format: "date-time" }
+        },
+        additionalProperties: false
+      },
+      AuditLogListResponse: {
+        type: "object",
+        required: ["data", "pagination"],
+        properties: {
+          data: {
+            type: "array",
+            items: { $ref: "#/components/schemas/SafeAuditLogEntry" }
+          },
+          pagination: { $ref: "#/components/schemas/PaginationMetadata" }
+        },
+        additionalProperties: false
+      },
       ErrorResponse: errorResponseSchema
     }
   },
   paths: {
     "/health": {
       get: {
-        summary: "Check API health",
+        summary: "Check API liveness",
         tags: ["System"],
+        description: "Lightweight process liveness check. Does not verify database connectivity.",
         responses: {
           "200": {
-            description: "API is healthy",
+            description: "API process is running",
             content: {
               "application/json": {
                 schema: {
@@ -697,6 +734,44 @@ export const openApiDocument = {
                     status: { type: "string", example: "ok" },
                     service: { type: "string", example: "verifieddoc-api" },
                     version: { type: "string", example: "0.1.0" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      get: {
+        summary: "Check API readiness",
+        tags: ["System"],
+        description:
+          "Executes a minimal PostgreSQL query. Returns 200 when the database responds and 503 when it does not. Never exposes database URLs, credentials, stack traces, or internal error details.",
+        responses: {
+          "200": {
+            description: "API is ready",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    status: { type: "string", example: "ready" },
+                    service: { type: "string", example: "verifieddoc-api" }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            description: "API dependencies are unavailable",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    status: { type: "string", example: "unavailable" },
+                    service: { type: "string", example: "verifieddoc-api" }
                   }
                 }
               }
@@ -1020,6 +1095,33 @@ export const openApiDocument = {
         }
       }
     },
+    "/organizations/{organizationId}/audit-logs": {
+      get: {
+        summary: "List organization audit logs",
+        tags: ["Organizations"],
+        security: [{ bearerAuth: [] }],
+        description:
+          "Requires ORGANIZATION_ADMIN membership. Tenant isolation is enforced by organizationId on the audit record, not JSON details. Sensitive fields such as passwords, token hashes, raw tokens, request bodies, authorization headers, and cookies are never returned.",
+        parameters: [
+          { name: "organizationId", in: "path", required: true, schema: { type: "string" } },
+          { name: "action", in: "query", schema: { type: "string" } },
+          { name: "resourceType", in: "query", schema: { type: "string" } },
+          { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+          { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+          { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } }
+        ],
+        responses: {
+          "200": {
+            description: "Paginated organization audit logs",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/AuditLogListResponse" } } }
+          },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Organization admin role required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Organization not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
     "/organizations/{organizationId}/members": {
       get: {
         summary: "List organization members",
@@ -1180,6 +1282,33 @@ export const openApiDocument = {
           "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           "403": { description: "Authenticated email does not match invitation", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           "404": { description: "Invitation unavailable", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/admin/audit-logs": {
+      get: {
+        summary: "List platform audit logs",
+        tags: ["Platform Administration"],
+        security: [{ bearerAuth: [] }],
+        description:
+          "Requires global PLATFORM_ADMIN role. Supports optional organizationId and actorId filters. Returns sanitized audit entries without passwords, token hashes, raw tokens, request bodies, authorization headers, or cookies.",
+        parameters: [
+          { name: "organizationId", in: "query", schema: { type: "string" } },
+          { name: "actorId", in: "query", schema: { type: "string" } },
+          { name: "action", in: "query", schema: { type: "string" } },
+          { name: "resourceType", in: "query", schema: { type: "string" } },
+          { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+          { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+          { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } }
+        ],
+        responses: {
+          "200": {
+            description: "Paginated platform audit logs",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/AuditLogListResponse" } } }
+          },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Platform administrator role required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
         }
       }
     },

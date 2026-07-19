@@ -4,6 +4,8 @@ import { authenticate } from "../../middleware/authenticate.js";
 import { requireOrganizationRoles } from "../../middleware/requireOrganizationRoles.js";
 import { requireRoles } from "../../middleware/requireRoles.js";
 import { validateBody, validateQuery } from "../../middleware/validate.js";
+import { listOrganizationAuditLogsHandler } from "../audit/audit.handlers.js";
+import { organizationAuditLogQuerySchema } from "../audit/audit.schemas.js";
 import {
   adminListOrganizationsHandler,
   applyOrganizationHandler,
@@ -30,6 +32,13 @@ export const organizationRouter = Router();
 organizationRouter.post("/", authenticate, validateBody(createOrganizationSchema), applyOrganizationHandler);
 organizationRouter.get("/", authenticate, listMyOrganizationsHandler);
 organizationRouter.get("/:organizationId", authenticate, getOrganizationHandler);
+organizationRouter.get(
+  "/:organizationId/audit-logs",
+  authenticate,
+  requireOrganizationRoles(OrganizationRole.ORGANIZATION_ADMIN),
+  validateQuery(organizationAuditLogQuerySchema),
+  listOrganizationAuditLogsHandler
+);
 organizationRouter.get(
   "/:organizationId/members",
   authenticate,

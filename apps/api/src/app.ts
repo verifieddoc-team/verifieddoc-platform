@@ -6,8 +6,10 @@ import swaggerUi from "swagger-ui-express";
 import { corsOrigins } from "./config/env.js";
 import { errorHandler, notFound } from "./lib/errors.js";
 import { createHttpLoggerOptions, type LogCaptureStream } from "./lib/http-logging.js";
+import { adminAuditRouter } from "./modules/audit/admin-audit.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { credentialRouter } from "./modules/credentials/credential.routes.js";
+import { readyHandler } from "./modules/health/ready.js";
 import { adminOrganizationRouter, organizationRouter } from "./modules/organizations/organization.routes.js";
 import { invitationAcceptRouter } from "./modules/invitations/invitation.routes.js";
 import { shareLinkRouter, verifyRouter } from "./modules/share-links/share-link.routes.js";
@@ -29,6 +31,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.get("/api/v1/health", (_req, res) => {
     res.status(200).json({ status: "ok", service: "verifieddoc-api", version: "0.1.0" });
   });
+  app.get("/api/v1/ready", readyHandler);
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/credentials", credentialRouter);
   app.use("/api/v1/credentials/:credentialId/share-links", shareLinkRouter);
@@ -36,6 +39,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use("/api/v1/invitations", invitationAcceptRouter);
   app.use("/api/v1/organizations", organizationRouter);
   app.use("/api/v1/admin/organizations", adminOrganizationRouter);
+  app.use("/api/v1/admin", adminAuditRouter);
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
   app.get("/openapi.json", (_req, res) => res.json(openApiDocument));
 

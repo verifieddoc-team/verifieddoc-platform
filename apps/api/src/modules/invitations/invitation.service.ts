@@ -115,6 +115,7 @@ export async function createOrganizationInvitation(
       await tx.auditLog.create({
         data: {
           actorId: inviterId,
+          organizationId,
           action: "ORGANIZATION_INVITATION_CREATED",
           resourceType: "OrganizationInvitation",
           resourceId: createdInvitation.id,
@@ -216,6 +217,7 @@ export async function revokeOrganizationInvitation(
       await tx.auditLog.create({
         data: {
           actorId: revokerId,
+          organizationId,
           action: "ORGANIZATION_INVITATION_REVOKED",
           resourceType: "OrganizationInvitation",
           resourceId: invitationId,
@@ -324,6 +326,7 @@ export async function acceptOrganizationInvitation(
       await tx.auditLog.create({
         data: {
           actorId: userId,
+          organizationId: invitation.organizationId,
           action: "ORGANIZATION_INVITATION_ACCEPTED",
           resourceType: "OrganizationInvitation",
           resourceId: invitation.id,

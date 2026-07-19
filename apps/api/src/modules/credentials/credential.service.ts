@@ -1,9 +1,7 @@
 import {
   CredentialStatus,
   OrganizationRole,
-  OrganizationStatus,
-  type Credential,
-  type Organization
+  OrganizationStatus
 } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
 import {
@@ -31,23 +29,6 @@ class CredentialRevocationClaimError extends Error {
     super("Credential revocation claim failed");
     this.name = "CredentialRevocationClaimError";
   }
-}
-
-async function assertVerifiedOrganization(organizationId: string) {
-  const organization = await prisma.organization.findUnique({
-    where: { id: organizationId },
-    select: { id: true, status: true }
-  });
-
-  if (!organization) {
-    throw new AppError(404, "NOT_FOUND", "Organization not found");
-  }
-
-  if (organization.status !== OrganizationStatus.VERIFIED) {
-    throw new AppError(403, "ORGANIZATION_NOT_VERIFIED", "Only verified organizations can issue credentials");
-  }
-
-  return organization;
 }
 
 async function getOrganizationMembership(userId: string, organizationId: string) {
@@ -131,6 +112,7 @@ export async function issueCredential(
       await tx.auditLog.create({
         data: {
           actorId: issuerId,
+          organizationId,
           action: "CREDENTIAL_ISSUED",
           resourceType: "Credential",
           resourceId: createdCredential.id,
@@ -333,6 +315,7 @@ export async function revokeCredential(
       await tx.auditLog.create({
         data: {
           actorId: userId,
+          organizationId,
           action: "CREDENTIAL_REVOKED",
           resourceType: "Credential",
           resourceId: credentialId,

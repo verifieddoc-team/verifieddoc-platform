@@ -111,6 +111,7 @@ export async function updateOrganizationMemberRole(
       await tx.auditLog.create({
         data: {
           actorId,
+          organizationId,
           action: "ORGANIZATION_MEMBER_ROLE_UPDATED",
           resourceType: "OrganizationMember",
           resourceId: currentMembership.id,
@@ -209,6 +210,7 @@ export async function removeOrganizationMember(
       await tx.auditLog.create({
         data: {
           actorId,
+          organizationId,
           action: "ORGANIZATION_MEMBER_REMOVED",
           resourceType: "OrganizationMember",
           resourceId: currentMembership.id,

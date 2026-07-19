@@ -207,6 +207,7 @@ export async function reviewOrganization(
       await tx.auditLog.create({
         data: {
           actorId: reviewerId,
+          organizationId,
           action: input.decision === "APPROVE" ? "ORGANIZATION_APPROVED" : "ORGANIZATION_REJECTED",
           resourceType: "Organization",
           resourceId: organizationId,

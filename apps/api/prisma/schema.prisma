@@ -90,6 +90,7 @@ model Organization {
   members            OrganizationMember[]
   invitations        OrganizationInvitation[]
   credentials        Credential[]
+  auditLogs          AuditLog[]
   reviewedBy         User?                @relation("OrganizationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
@@ -193,17 +194,21 @@ model ShareLink {
 }
 
 model AuditLog {
-  id           String   @id @default(cuid())
-  actorId      String?
-  action       String
-  resourceType String
-  resourceId   String?
-  ipAddress    String?
-  userAgent    String?
-  details      Json?
-  actor        User?    @relation("AuditActor", fields: [actorId], references: [id])
-  createdAt    DateTime @default(now())
+  id             String        @id @default(cuid())
+  actorId        String?
+  organizationId String?
+  action         String
+  resourceType   String
+  resourceId     String?
+  ipAddress      String?
+  userAgent      String?
+  details        Json?
+  actor          User?         @relation("AuditActor", fields: [actorId], references: [id])
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
 
   @@index([resourceType, resourceId])
   @@index([actorId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([action, createdAt])
 }

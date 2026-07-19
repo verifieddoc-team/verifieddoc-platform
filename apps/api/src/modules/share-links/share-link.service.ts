@@ -75,6 +75,7 @@ export async function createShareLink(
     await tx.auditLog.create({
       data: {
         actorId: userId,
+        organizationId: credential.organizationId,
         action: "SHARE_LINK_CREATED",
         resourceType: "ShareLink",
         resourceId: createdShareLink.id,
@@ -126,6 +127,11 @@ export async function revokeShareLink(
     throw new AppError(409, "SHARE_LINK_ALREADY_REVOKED", "This share link has already been revoked");
   }
 
+  const credential = await prisma.credential.findUniqueOrThrow({
+    where: { id: credentialId },
+    select: { organizationId: true }
+  });
+
   try {
     const revokedShareLink = await prisma.$transaction(async (tx) => {
       const now = new Date();
@@ -148,6 +154,7 @@ export async function revokeShareLink(
       await tx.auditLog.create({
         data: {
           actorId: userId,
+          organizationId: credential.organizationId,
           action: "SHARE_LINK_REVOKED",
           resourceType: "ShareLink",
           resourceId: shareLinkId,
@@ -226,6 +233,7 @@ export async function verifyCredentialByToken(
       await tx.auditLog.create({
         data: {
           actorId: null,
+          organizationId: claimedShareLink.credential.organizationId,
           action: "VERIFY_CREDENTIAL",
           resourceType: "Credential",
           resourceId: claimedShareLink.credentialId,
