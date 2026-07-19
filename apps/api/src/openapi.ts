@@ -256,6 +256,178 @@ export const openApiDocument = {
           organization: { $ref: "#/components/schemas/AdminOrganization" }
         }
       },
+      CredentialStatus: {
+        type: "string",
+        enum: ["ACTIVE", "EXPIRED", "REVOKED"],
+        description: "Stored credential status"
+      },
+      EffectiveCredentialStatus: {
+        type: "string",
+        enum: ["ACTIVE", "EXPIRED", "REVOKED"],
+        description: "Computed status; ACTIVE credentials past expiresAt are effectively EXPIRED"
+      },
+      SafeClaims: {
+        type: "object",
+        additionalProperties: {
+          oneOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }]
+        }
+      },
+      CredentialOrganizationSummary: {
+        type: "object",
+        required: ["id", "name", "slug"],
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          slug: { type: "string" }
+        }
+      },
+      SafeCredential: {
+        type: "object",
+        required: [
+          "id",
+          "publicId",
+          "title",
+          "credentialType",
+          "referenceNo",
+          "status",
+          "effectiveStatus",
+          "issuedAt",
+          "organization"
+        ],
+        properties: {
+          id: { type: "string" },
+          publicId: { type: "string" },
+          title: { type: "string" },
+          description: { type: "string", nullable: true },
+          credentialType: { type: "string" },
+          referenceNo: { type: "string" },
+          status: { $ref: "#/components/schemas/CredentialStatus" },
+          effectiveStatus: { $ref: "#/components/schemas/EffectiveCredentialStatus" },
+          issuedAt: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time", nullable: true },
+          revokedAt: { type: "string", format: "date-time", nullable: true },
+          revocationReason: { type: "string", nullable: true },
+          claims: { oneOf: [{ $ref: "#/components/schemas/SafeClaims" }, { type: "null" }] },
+          organization: { $ref: "#/components/schemas/CredentialOrganizationSummary" }
+        }
+      },
+      IssueCredentialRequest: {
+        type: "object",
+        required: ["holderEmail", "title", "credentialType", "referenceNo", "issuedAt"],
+        properties: {
+          holderEmail: { type: "string", format: "email" },
+          title: { type: "string" },
+          credentialType: { type: "string" },
+          referenceNo: { type: "string", minLength: 3, maxLength: 100 },
+          description: { type: "string" },
+          issuedAt: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time" },
+          claims: { $ref: "#/components/schemas/SafeClaims" }
+        }
+      },
+      IssueCredentialResponse: {
+        type: "object",
+        required: ["credential"],
+        properties: {
+          credential: { $ref: "#/components/schemas/SafeCredential" }
+        }
+      },
+      HolderCredentialSummary: {
+        type: "object",
+        required: [
+          "id",
+          "publicId",
+          "title",
+          "credentialType",
+          "organization",
+          "issuedAt",
+          "status",
+          "effectiveStatus"
+        ],
+        properties: {
+          id: { type: "string" },
+          publicId: { type: "string" },
+          title: { type: "string" },
+          credentialType: { type: "string" },
+          claims: { oneOf: [{ $ref: "#/components/schemas/SafeClaims" }, { type: "null" }] },
+          organization: {
+            type: "object",
+            required: ["name", "slug"],
+            properties: {
+              name: { type: "string" },
+              slug: { type: "string" }
+            }
+          },
+          issuedAt: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time", nullable: true },
+          status: { $ref: "#/components/schemas/CredentialStatus" },
+          effectiveStatus: { $ref: "#/components/schemas/EffectiveCredentialStatus" }
+        }
+      },
+      HolderCredentialListResponse: {
+        type: "object",
+        required: ["data", "pagination"],
+        properties: {
+          data: {
+            type: "array",
+            items: { $ref: "#/components/schemas/HolderCredentialSummary" }
+          },
+          pagination: { $ref: "#/components/schemas/PaginationMetadata" }
+        }
+      },
+      CredentialDetailResponse: {
+        type: "object",
+        required: ["credential"],
+        properties: {
+          credential: { $ref: "#/components/schemas/SafeCredential" }
+        }
+      },
+      OrganizationCredentialSummary: {
+        allOf: [
+          { $ref: "#/components/schemas/SafeCredential" },
+          {
+            type: "object",
+            required: ["holder"],
+            properties: {
+              holder: {
+                type: "object",
+                required: ["id", "email", "firstName", "lastName"],
+                properties: {
+                  id: { type: "string" },
+                  email: { type: "string", format: "email" },
+                  firstName: { type: "string" },
+                  lastName: { type: "string" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      OrganizationCredentialListResponse: {
+        type: "object",
+        required: ["data", "pagination"],
+        properties: {
+          data: {
+            type: "array",
+            items: { $ref: "#/components/schemas/OrganizationCredentialSummary" }
+          },
+          pagination: { $ref: "#/components/schemas/PaginationMetadata" }
+        }
+      },
+      RevokeCredentialRequest: {
+        type: "object",
+        required: ["reason"],
+        properties: {
+          reason: { type: "string", minLength: 5, maxLength: 1000 }
+        }
+      },
+      RevokeCredentialResponse: {
+        type: "object",
+        required: ["credential"],
+        properties: {
+          credential: { $ref: "#/components/schemas/SafeCredential" }
+        }
+      },
       ErrorResponse: errorResponseSchema
     }
   },
@@ -771,6 +943,111 @@ export const openApiDocument = {
               }
             }
           }
+        }
+      }
+    },
+    "/credentials": {
+      get: {
+        summary: "List credentials in the authenticated holder wallet",
+        tags: ["Credentials"],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "status",
+            in: "query",
+            schema: { type: "string", enum: ["ACTIVE", "EXPIRED", "REVOKED"] }
+          },
+          { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } }
+        ],
+        responses: {
+          "200": {
+            description: "Paginated holder credentials",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HolderCredentialListResponse" }
+              }
+            }
+          },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/credentials/{credentialId}": {
+      get: {
+        summary: "Get credential detail for an authorized holder or organization member",
+        tags: ["Credentials"],
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "credentialId", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Credential detail",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/CredentialDetailResponse" } } }
+          },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Insufficient access", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Credential not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/organizations/{organizationId}/credentials": {
+      post: {
+        summary: "Issue a credential from a verified organization",
+        tags: ["Credentials"],
+        security: [{ bearerAuth: [] }],
+        description: "Requires ORGANIZATION_ADMIN or ORGANIZATION_ISSUER membership and a VERIFIED organization.",
+        parameters: [{ name: "organizationId", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/IssueCredentialRequest" } } }
+        },
+        responses: {
+          "201": { description: "Credential issued", content: { "application/json": { schema: { $ref: "#/components/schemas/IssueCredentialResponse" } } } },
+          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Insufficient permissions or organization not verified", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Holder not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "409": { description: "Duplicate reference number", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      },
+      get: {
+        summary: "List credentials issued by an organization",
+        tags: ["Credentials"],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "organizationId", in: "path", required: true, schema: { type: "string" } },
+          { name: "status", in: "query", schema: { type: "string", enum: ["ACTIVE", "EXPIRED", "REVOKED"] } },
+          { name: "holderId", in: "query", schema: { type: "string" } },
+          { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } }
+        ],
+        responses: {
+          "200": { description: "Paginated organization credentials", content: { "application/json": { schema: { $ref: "#/components/schemas/OrganizationCredentialListResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Insufficient organization permissions", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/organizations/{organizationId}/credentials/{credentialId}/revoke": {
+      patch: {
+        summary: "Revoke an active organization credential",
+        tags: ["Credentials"],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "organizationId", in: "path", required: true, schema: { type: "string" } },
+          { name: "credentialId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/RevokeCredentialRequest" } } }
+        },
+        responses: {
+          "200": { description: "Credential revoked", content: { "application/json": { schema: { $ref: "#/components/schemas/RevokeCredentialResponse" } } } },
+          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Cross-organization or insufficient permissions", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Credential not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "409": { description: "Credential is not active", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
         }
       }
     }

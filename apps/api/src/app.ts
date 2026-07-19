@@ -6,6 +6,7 @@ import swaggerUi from "swagger-ui-express";
 import { corsOrigins } from "./config/env.js";
 import { errorHandler, notFound } from "./lib/errors.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { credentialRouter } from "./modules/credentials/credential.routes.js";
 import { adminOrganizationRouter, organizationRouter } from "./modules/organizations/organization.routes.js";
 import { openApiDocument } from "./openapi.js";
 
@@ -22,6 +23,7 @@ export function createApp() {
     res.status(200).json({ status: "ok", service: "verifieddoc-api", version: "0.1.0" });
   });
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/credentials", credentialRouter);
   app.use("/api/v1/organizations", organizationRouter);
   app.use("/api/v1/admin/organizations", adminOrganizationRouter);
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));

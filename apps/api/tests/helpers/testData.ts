@@ -39,6 +39,16 @@ export function createOrganizationPayload(overrides: Record<string, unknown> = {
 }
 
 export async function cleanupTestOrganizations() {
+  await prisma.credential.deleteMany({
+    where: {
+      organization: {
+        slug: {
+          startsWith: TEST_ORG_SLUG_PREFIX
+        }
+      }
+    }
+  });
+
   await prisma.organization.deleteMany({
     where: {
       slug: {
