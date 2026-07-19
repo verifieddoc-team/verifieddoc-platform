@@ -41,6 +41,7 @@ model User {
   memberships    OrganizationMember[]
   credentials    Credential[]         @relation("CredentialHolder")
   issued          Credential[]         @relation("CredentialIssuer")
+  revokedCredentials Credential[]      @relation("CredentialRevoker")
   shareLinks      ShareLink[]
   auditLogs       AuditLog[]           @relation("AuditActor")
   refreshTokens  RefreshToken[]
@@ -106,30 +107,35 @@ model OrganizationMember {
 }
 
 model Credential {
-  id             String           @id @default(cuid())
-  publicId       String           @unique @default(cuid())
-  title          String
-  description    String?
-  credentialType String
-  referenceNo    String
-  status         CredentialStatus @default(ACTIVE)
-  issuedAt       DateTime
-  expiresAt      DateTime?
-  revokedAt      DateTime?
-  revocationNote String?
-  metadata       Json?
-  organizationId String
-  holderId       String
-  issuedById     String
-  organization   Organization     @relation(fields: [organizationId], references: [id])
-  holder         User             @relation("CredentialHolder", fields: [holderId], references: [id])
-  issuedBy       User             @relation("CredentialIssuer", fields: [issuedById], references: [id])
-  shareLinks     ShareLink[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id               String           @id @default(cuid())
+  publicId         String           @unique @default(cuid())
+  title            String
+  description      String?
+  credentialType   String
+  referenceNo      String
+  status           CredentialStatus @default(ACTIVE)
+  issuedAt         DateTime
+  expiresAt        DateTime?
+  revokedAt        DateTime?
+  revocationReason String?
+  revokedById      String?
+  metadata         Json?
+  organizationId   String
+  holderId         String
+  issuedById       String
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  holder           User             @relation("CredentialHolder", fields: [holderId], references: [id])
+  issuedBy         User             @relation("CredentialIssuer", fields: [issuedById], references: [id])
+  revokedBy        User?            @relation("CredentialRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  shareLinks       ShareLink[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@unique([organizationId, referenceNo])
   @@index([holderId, status])
+  @@index([organizationId, status])
+  @@index([holderId, issuedAt])
+  @@index([organizationId, issuedAt])
 }
 
 model ShareLink {

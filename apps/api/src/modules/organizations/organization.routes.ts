@@ -12,6 +12,7 @@ import {
   listOrganizationMembersHandler,
   reviewOrganizationHandler
 } from "./organization.handlers.js";
+import { organizationCredentialRouter } from "../credentials/credential.routes.js";
 import {
   adminOrganizationListQuerySchema,
   createOrganizationSchema,
@@ -29,6 +30,7 @@ organizationRouter.get(
   requireOrganizationRoles(OrganizationRole.ORGANIZATION_ADMIN),
   listOrganizationMembersHandler
 );
+organizationRouter.use("/:organizationId/credentials", organizationCredentialRouter);
 
 export const adminOrganizationRouter = Router();
 
