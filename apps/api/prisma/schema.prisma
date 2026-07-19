@@ -42,7 +42,8 @@ model User {
   credentials    Credential[]         @relation("CredentialHolder")
   issued          Credential[]         @relation("CredentialIssuer")
   revokedCredentials Credential[]      @relation("CredentialRevoker")
-  shareLinks      ShareLink[]
+  shareLinks      ShareLink[]          @relation("ShareLinkCreator")
+  revokedShareLinks ShareLink[]        @relation("ShareLinkRevoker")
   auditLogs       AuditLog[]           @relation("AuditActor")
   refreshTokens  RefreshToken[]
   reviewedOrganizations Organization[] @relation("OrganizationReviewer")
@@ -139,17 +140,26 @@ model Credential {
 }
 
 model ShareLink {
-  id           String     @id @default(cuid())
-  tokenHash    String     @unique
-  credentialId String
-  createdById  String
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  maxViews     Int?
-  viewCount    Int        @default(0)
-  credential   Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
-  createdBy    User       @relation(fields: [createdById], references: [id])
-  createdAt    DateTime   @default(now())
+  id                String     @id @default(cuid())
+  tokenHash         String     @unique
+  credentialId      String
+  createdById       String
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  revokedById       String?
+  maxViews          Int?
+  viewCount         Int        @default(0)
+  lastViewedAt      DateTime?
+  disclosedClaims   String[]   @default([])
+  includeHolderName Boolean    @default(false)
+  includeReferenceNo Boolean   @default(false)
+  credential        Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  createdBy         User       @relation("ShareLinkCreator", fields: [createdById], references: [id])
+  revokedBy         User?      @relation("ShareLinkRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime   @default(now())
+
+  @@index([credentialId, createdAt])
+  @@index([revokedById])
 }
 
 model AuditLog {

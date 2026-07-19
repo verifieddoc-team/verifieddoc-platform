@@ -22,6 +22,10 @@ export function generateRefreshToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+export function generateShareToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
 export function createAccessToken(payload: AccessTokenPayload): string {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
     expiresIn: ACCESS_TOKEN_TTL,

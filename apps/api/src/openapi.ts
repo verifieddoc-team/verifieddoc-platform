@@ -428,6 +428,153 @@ export const openApiDocument = {
           credential: { $ref: "#/components/schemas/SafeCredential" }
         }
       },
+      ShareLinkState: {
+        type: "string",
+        enum: ["ACTIVE", "EXPIRED", "REVOKED", "EXHAUSTED"],
+        description: "Computed share-link availability state"
+      },
+      SafeShareLinkSummary: {
+        type: "object",
+        required: [
+          "id",
+          "createdAt",
+          "expiresAt",
+          "revokedAt",
+          "maxViews",
+          "viewCount",
+          "lastViewedAt",
+          "disclosedClaims",
+          "includeHolderName",
+          "includeReferenceNo",
+          "state"
+        ],
+        properties: {
+          id: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time" },
+          revokedAt: { type: "string", format: "date-time", nullable: true },
+          maxViews: { type: "integer", nullable: true, minimum: 1, maximum: 100 },
+          viewCount: { type: "integer", minimum: 0 },
+          lastViewedAt: { type: "string", format: "date-time", nullable: true },
+          disclosedClaims: { type: "array", items: { type: "string" }, maxItems: 20 },
+          includeHolderName: { type: "boolean" },
+          includeReferenceNo: { type: "boolean" },
+          state: { $ref: "#/components/schemas/ShareLinkState" }
+        },
+        additionalProperties: false
+      },
+      CreateShareLinkRequest: {
+        type: "object",
+        required: ["expiresInHours"],
+        properties: {
+          expiresInHours: { type: "integer", minimum: 1, maximum: 168 },
+          maxViews: { type: "integer", minimum: 1, maximum: 100 },
+          disclosedClaims: {
+            type: "array",
+            items: { type: "string" },
+            maxItems: 20,
+            description: "Optional claim keys to disclose during verification"
+          },
+          includeHolderName: { type: "boolean", default: false },
+          includeReferenceNo: { type: "boolean", default: false }
+        },
+        additionalProperties: false
+      },
+      CreateShareLinkResponse: {
+        type: "object",
+        required: ["shareLink", "token", "verificationPath", "verificationUrl"],
+        properties: {
+          shareLink: { $ref: "#/components/schemas/SafeShareLinkSummary" },
+          token: {
+            type: "string",
+            description: "Raw share token returned once; suitable for QR encoding via verificationUrl"
+          },
+          verificationPath: {
+            type: "string",
+            example: "/verify/abc123",
+            description: "Relative web path for mobile and web clients"
+          },
+          verificationUrl: {
+            type: "string",
+            format: "uri",
+            example: "http://localhost:3000/verify/abc123",
+            description: "Absolute public web URL derived from PUBLIC_WEB_URL; clients may render this as a QR code"
+          }
+        },
+        additionalProperties: false
+      },
+      ShareLinkListResponse: {
+        type: "object",
+        required: ["data"],
+        properties: {
+          data: {
+            type: "array",
+            items: { $ref: "#/components/schemas/SafeShareLinkSummary" }
+          }
+        }
+      },
+      RevokeShareLinkResponse: {
+        type: "object",
+        required: ["shareLink"],
+        properties: {
+          shareLink: { $ref: "#/components/schemas/SafeShareLinkSummary" }
+        }
+      },
+      VerificationResult: {
+        type: "string",
+        enum: ["VALID", "EXPIRED", "REVOKED"],
+        description: "Credential verification outcome based on effective credential status"
+      },
+      PublicVerifiedOrganization: {
+        type: "object",
+        required: ["name", "slug"],
+        properties: {
+          name: { type: "string" },
+          slug: { type: "string" }
+        },
+        additionalProperties: false
+      },
+      PublicVerifiedCredential: {
+        type: "object",
+        required: [
+          "publicId",
+          "title",
+          "credentialType",
+          "effectiveStatus",
+          "issuedAt",
+          "expiresAt",
+          "organization"
+        ],
+        properties: {
+          publicId: { type: "string" },
+          title: { type: "string" },
+          credentialType: { type: "string" },
+          effectiveStatus: { $ref: "#/components/schemas/EffectiveCredentialStatus" },
+          issuedAt: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time", nullable: true },
+          revokedAt: {
+            type: "string",
+            format: "date-time",
+            description: "Present only when effectiveStatus is REVOKED"
+          },
+          organization: { $ref: "#/components/schemas/PublicVerifiedOrganization" },
+          holderName: { type: "string" },
+          referenceNo: { type: "string" },
+          claims: { $ref: "#/components/schemas/SafeClaims" }
+        },
+        additionalProperties: false,
+        description:
+          "Holder-approved disclosure only. Never includes holder email, user IDs, internal credential IDs, share-link IDs, token hashes, undisclosed claims, revocation reasons, or authentication data."
+      },
+      PublicVerificationResponse: {
+        type: "object",
+        required: ["result", "credential"],
+        properties: {
+          result: { $ref: "#/components/schemas/VerificationResult" },
+          credential: { $ref: "#/components/schemas/PublicVerifiedCredential" }
+        },
+        additionalProperties: false
+      },
       ErrorResponse: errorResponseSchema
     }
   },
@@ -1048,6 +1195,85 @@ export const openApiDocument = {
           "403": { description: "Cross-organization or insufficient permissions", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           "404": { description: "Credential not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           "409": { description: "Credential is not active", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/credentials/{credentialId}/share-links": {
+      post: {
+        summary: "Create a consent-based share link for a credential",
+        tags: ["Share Links"],
+        security: [{ bearerAuth: [] }],
+        description:
+          "Only the credential holder may create a share link. The raw token is returned once and never stored; only its SHA-256 hash is persisted.",
+        parameters: [{ name: "credentialId", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CreateShareLinkRequest" } } }
+        },
+        responses: {
+          "201": {
+            description: "Share link created",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/CreateShareLinkResponse" } } }
+          },
+          "400": { description: "Validation error or invalid disclosed claims", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Only the credential holder may create share links", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Credential not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      },
+      get: {
+        summary: "List share links for a credential",
+        tags: ["Share Links"],
+        security: [{ bearerAuth: [] }],
+        description: "Only the credential holder may list share links. Token hashes and raw tokens are never returned.",
+        parameters: [{ name: "credentialId", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "Share links for the credential", content: { "application/json": { schema: { $ref: "#/components/schemas/ShareLinkListResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Only the credential holder may list share links", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Credential not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/credentials/{credentialId}/share-links/{shareLinkId}/revoke": {
+      patch: {
+        summary: "Revoke a credential share link",
+        tags: ["Share Links"],
+        security: [{ bearerAuth: [] }],
+        description: "Only the credential holder may revoke a share link. Uses a conditional update for concurrent requests.",
+        parameters: [
+          { name: "credentialId", in: "path", required: true, schema: { type: "string" } },
+          { name: "shareLinkId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        responses: {
+          "200": { description: "Share link revoked", content: { "application/json": { schema: { $ref: "#/components/schemas/RevokeShareLinkResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Only the credential holder may revoke share links", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Credential or share link not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "409": { description: "Share link already revoked", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/verify/{token}": {
+      get: {
+        summary: "Publicly verify a credential via share token",
+        tags: ["Verification"],
+        description:
+          "No authentication required. Rate limited. The submitted token is hashed immediately and never logged. Unknown, expired, revoked, or exhausted links return a generic verification-unavailable response. Successful responses disclose only holder-approved fields.",
+        parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Credential verification result",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PublicVerificationResponse" } } }
+          },
+          "404": {
+            description: "Verification unavailable for invalid, expired, revoked, or exhausted links",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          },
+          "429": {
+            description: "Public verification rate limit exceeded",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          }
         }
       }
     }

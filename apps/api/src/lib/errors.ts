@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
+import { sanitizeRequestUrl } from "./sanitize-request-url.js";
 
 export class AppError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -8,7 +9,8 @@ export class AppError extends Error {
 }
 
 export function notFound(req: Request, _res: Response, next: NextFunction) {
-  next(new AppError(404, "NOT_FOUND", `Route ${req.method} ${req.path} was not found`));
+  const safePath = sanitizeRequestUrl(req.originalUrl || req.url || req.path);
+  next(new AppError(404, "NOT_FOUND", `Route ${req.method} ${safePath} was not found`));
 }
 
 export function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction) {
