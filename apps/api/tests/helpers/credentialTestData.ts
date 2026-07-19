@@ -1,16 +1,16 @@
-import { randomUUID } from "node:crypto";
+﻿import { randomUUID } from "node:crypto";
 import { OrganizationRole, OrganizationStatus, PlatformRole } from "@prisma/client";
 import type { Express } from "express";
 import request from "supertest";
 import { expect } from "vitest";
 import { prisma } from "../../src/lib/prisma.js";
+import { createAccessToken } from "../../src/lib/tokens.js";
 import {
   addOrganizationMember,
   applyForOrganization,
   createPlatformAdminSession,
   createTestEmail,
-  registerAndAuthenticate,
-  TEST_PASSWORD
+  createTestUser
 } from "./testData.js";
 
 export function createIssueCredentialPayload(overrides: Record<string, unknown> = {}) {
@@ -28,7 +28,10 @@ export function createIssueCredentialPayload(overrides: Record<string, unknown> 
 }
 
 export async function setupVerifiedOrganization(app: Express) {
-  const admin = await registerAndAuthenticate(app);
+  const admin = await createTestUser({
+    firstName: "Fictional",
+    lastName: "Admin"
+  });
   const { response } = await applyForOrganization(app, admin.accessToken);
   const organizationId = response.body.organization.id as string;
   const { accessToken: platformToken } = await createPlatformAdminSession(app);
@@ -65,33 +68,37 @@ export async function issueCredentialRequest(
 }
 
 export async function registerHolder(app: Express, overrides: Record<string, unknown> = {}) {
-  return registerAndAuthenticate(app, {
+  return createTestUser({
     firstName: "Fictional",
     lastName: "Holder",
-    ...overrides
+    email: typeof overrides.email === "string" ? overrides.email : undefined,
+    role: typeof overrides.role === "string" ? (overrides.role as PlatformRole) : undefined
   });
 }
 
-export async function addOrganizationIssuer(organizationId: string, app: Express) {
-  const issuer = await registerAndAuthenticate(app, { firstName: "Fictional", lastName: "Issuer" });
+export async function addOrganizationIssuer(organizationId: string, _app: Express) {
+  const issuer = await createTestUser({ firstName: "Fictional", lastName: "Issuer" });
   await addOrganizationMember(organizationId, issuer.user.id, OrganizationRole.ORGANIZATION_ISSUER);
 
   return issuer;
 }
 
-export async function createGlobalPlatformAdminHolder(app: Express) {
-  const session = await registerAndAuthenticate(app, { role: "HOLDER" });
-  await prisma.user.update({
+export async function createGlobalPlatformAdminHolder(_app: Express) {
+  const session = await createTestUser({ role: PlatformRole.HOLDER });
+  const user = await prisma.user.update({
     where: { id: session.user.id },
     data: { role: PlatformRole.PLATFORM_ADMIN }
   });
 
-  const accessToken = await request(app)
-    .post("/api/v1/auth/login")
-    .send({ email: session.payload.email, password: TEST_PASSWORD })
-    .then((response) => response.body.accessToken as string);
-
-  return { ...session, accessToken };
+  return {
+    ...session,
+    user,
+    accessToken: createAccessToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role
+    })
+  };
 }
 
 export function expectNoSensitiveAuthData(body: unknown) {

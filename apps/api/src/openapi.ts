@@ -575,6 +575,109 @@ export const openApiDocument = {
         },
         additionalProperties: false
       },
+      InvitationState: {
+        type: "string",
+        enum: ["PENDING", "ACCEPTED", "REVOKED", "EXPIRED"]
+      },
+      SafeInvitationSummary: {
+        type: "object",
+        required: ["id", "email", "role", "createdAt", "expiresAt", "acceptedAt", "revokedAt", "state"],
+        properties: {
+          id: { type: "string" },
+          email: { type: "string", format: "email" },
+          role: { $ref: "#/components/schemas/OrganizationRole" },
+          createdAt: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time" },
+          acceptedAt: { type: "string", format: "date-time", nullable: true },
+          revokedAt: { type: "string", format: "date-time", nullable: true },
+          state: { $ref: "#/components/schemas/InvitationState" }
+        },
+        additionalProperties: false
+      },
+      CreateInvitationRequest: {
+        type: "object",
+        required: ["email", "role"],
+        properties: {
+          email: { type: "string", format: "email" },
+          role: { $ref: "#/components/schemas/OrganizationRole" },
+          expiresInHours: { type: "integer", minimum: 1, maximum: 168, default: 72 }
+        },
+        additionalProperties: false
+      },
+      CreateInvitationResponse: {
+        type: "object",
+        required: ["invitation", "token", "invitationPath", "invitationUrl"],
+        properties: {
+          invitation: { $ref: "#/components/schemas/SafeInvitationSummary" },
+          token: {
+            type: "string",
+            description: "Raw invitation token returned once for frontend acceptance flows"
+          },
+          invitationPath: {
+            type: "string",
+            example: "/invitations/accept#token=abc123",
+            description:
+              "Frontend route using a URL fragment so the token is not sent to the server on page load. The frontend reads the token from window.location.hash, removes the fragment from browser history immediately, and submits it in POST /invitations/accept. Never send the token as an API query parameter."
+          },
+          invitationUrl: {
+            type: "string",
+            format: "uri",
+            example: "http://localhost:3000/invitations/accept#token=abc123",
+            description:
+              "Absolute invitation URL derived from PUBLIC_WEB_URL with the token in the URL fragment (#token=...) rather than a query string."
+          }
+        },
+        additionalProperties: false
+      },
+      InvitationListResponse: {
+        type: "object",
+        required: ["data"],
+        properties: {
+          data: {
+            type: "array",
+            items: { $ref: "#/components/schemas/SafeInvitationSummary" }
+          }
+        }
+      },
+      RevokeInvitationResponse: {
+        type: "object",
+        required: ["invitation"],
+        properties: {
+          invitation: { $ref: "#/components/schemas/SafeInvitationSummary" }
+        }
+      },
+      AcceptInvitationRequest: {
+        type: "object",
+        required: ["token"],
+        properties: {
+          token: { type: "string" }
+        },
+        additionalProperties: false
+      },
+      AcceptInvitationResponse: {
+        type: "object",
+        required: ["organizationId", "membershipRole"],
+        properties: {
+          organizationId: { type: "string" },
+          membershipRole: { $ref: "#/components/schemas/OrganizationRole" }
+        },
+        additionalProperties: false
+      },
+      UpdateMemberRoleRequest: {
+        type: "object",
+        required: ["role"],
+        properties: {
+          role: { $ref: "#/components/schemas/OrganizationRole" }
+        },
+        additionalProperties: false
+      },
+      UpdateMemberRoleResponse: {
+        type: "object",
+        required: ["member"],
+        properties: {
+          member: { $ref: "#/components/schemas/OrganizationMemberProfile" }
+        }
+      },
       ErrorResponse: errorResponseSchema
     }
   },
@@ -963,6 +1066,120 @@ export const openApiDocument = {
               }
             }
           }
+        }
+      }
+    },
+    "/organizations/{organizationId}/members/{userId}": {
+      patch: {
+        summary: "Update an organization member role",
+        tags: ["Organizations"],
+        security: [{ bearerAuth: [] }],
+        description:
+          "Requires ORGANIZATION_ADMIN membership. Updates OrganizationMember.role only; never changes User.role. The final organization admin cannot be demoted.",
+        parameters: [
+          { name: "organizationId", in: "path", required: true, schema: { type: "string" } },
+          { name: "userId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/UpdateMemberRoleRequest" } } }
+        },
+        responses: {
+          "200": {
+            description: "Updated member profile",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/UpdateMemberRoleResponse" } } }
+          },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Insufficient organization permissions", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Organization or member not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "409": { description: "Final admin protection or update conflict", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      },
+      delete: {
+        summary: "Remove an organization member",
+        tags: ["Organizations"],
+        security: [{ bearerAuth: [] }],
+        description:
+          "Requires ORGANIZATION_ADMIN membership. Removes only the organization membership; never deletes the User. The final organization admin cannot be removed.",
+        parameters: [
+          { name: "organizationId", in: "path", required: true, schema: { type: "string" } },
+          { name: "userId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        responses: {
+          "204": { description: "Member removed" },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Insufficient organization permissions", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Organization or member not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "409": { description: "Final admin protection or removal conflict", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/organizations/{organizationId}/invitations": {
+      post: {
+        summary: "Create an organization invitation",
+        tags: ["Organization Invitations"],
+        security: [{ bearerAuth: [] }],
+        description:
+          "Requires ORGANIZATION_ADMIN membership and a VERIFIED organization. Raw invitation tokens are returned once in the response body and invitation URL fragment. The frontend must read the token from window.location.hash, remove the fragment from browser history immediately, and submit it via POST /invitations/accept. Tokens must never be sent as API query parameters or stored in server logs.",
+        parameters: [{ name: "organizationId", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CreateInvitationRequest" } } }
+        },
+        responses: {
+          "201": { description: "Invitation created", content: { "application/json": { schema: { $ref: "#/components/schemas/CreateInvitationResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Insufficient permissions or organization not verified", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "409": { description: "Member already exists or active invitation conflict", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      },
+      get: {
+        summary: "List organization invitations",
+        tags: ["Organization Invitations"],
+        security: [{ bearerAuth: [] }],
+        description: "Requires ORGANIZATION_ADMIN membership. Never returns tokenHash, activeKey, or raw tokens.",
+        parameters: [{ name: "organizationId", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "Invitation summaries", content: { "application/json": { schema: { $ref: "#/components/schemas/InvitationListResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Insufficient organization permissions", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/organizations/{organizationId}/invitations/{invitationId}/revoke": {
+      patch: {
+        summary: "Revoke a pending organization invitation",
+        tags: ["Organization Invitations"],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "organizationId", in: "path", required: true, schema: { type: "string" } },
+          { name: "invitationId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        responses: {
+          "200": { description: "Invitation revoked", content: { "application/json": { schema: { $ref: "#/components/schemas/RevokeInvitationResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Insufficient organization permissions", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Invitation not found", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "409": { description: "Invitation already accepted, revoked, or expired", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/invitations/accept": {
+      post: {
+        summary: "Accept an organization invitation",
+        tags: ["Organization Invitations"],
+        security: [{ bearerAuth: [] }],
+        description:
+          "Requires authentication and an exact normalized email match. The token must be supplied in the JSON request body only; never as a query parameter. Frontend clients should read the token from the invitation URL fragment (window.location.hash), remove the fragment from browser history immediately, and POST it here. Unknown, expired, revoked, accepted, or replayed tokens return INVITATION_UNAVAILABLE without exposing token validity details.",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/AcceptInvitationRequest" } } }
+        },
+        responses: {
+          "200": { description: "Invitation accepted", content: { "application/json": { schema: { $ref: "#/components/schemas/AcceptInvitationResponse" } } } },
+          "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "403": { description: "Authenticated email does not match invitation", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Invitation unavailable", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
         }
       }
     },

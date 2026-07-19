@@ -12,12 +12,18 @@ import {
   listOrganizationMembersHandler,
   reviewOrganizationHandler
 } from "./organization.handlers.js";
+import {
+  removeOrganizationMemberHandler,
+  updateOrganizationMemberHandler
+} from "./member.handlers.js";
 import { organizationCredentialRouter } from "../credentials/credential.routes.js";
+import { organizationInvitationRouter } from "./organization-invitation.routes.js";
 import {
   adminOrganizationListQuerySchema,
   createOrganizationSchema,
   reviewOrganizationSchema
 } from "./organization.schemas.js";
+import { updateMemberRoleSchema } from "./member.schemas.js";
 
 export const organizationRouter = Router();
 
@@ -30,6 +36,20 @@ organizationRouter.get(
   requireOrganizationRoles(OrganizationRole.ORGANIZATION_ADMIN),
   listOrganizationMembersHandler
 );
+organizationRouter.patch(
+  "/:organizationId/members/:userId",
+  authenticate,
+  requireOrganizationRoles(OrganizationRole.ORGANIZATION_ADMIN),
+  validateBody(updateMemberRoleSchema),
+  updateOrganizationMemberHandler
+);
+organizationRouter.delete(
+  "/:organizationId/members/:userId",
+  authenticate,
+  requireOrganizationRoles(OrganizationRole.ORGANIZATION_ADMIN),
+  removeOrganizationMemberHandler
+);
+organizationRouter.use("/:organizationId/invitations", organizationInvitationRouter);
 organizationRouter.use("/:organizationId/credentials", organizationCredentialRouter);
 
 export const adminOrganizationRouter = Router();

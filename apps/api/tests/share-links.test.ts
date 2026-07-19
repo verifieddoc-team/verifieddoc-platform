@@ -450,4 +450,4 @@ describe("Credential sharing and public verification", () => {
     expect(response.body.data[0].viewCount).toBe(1);
     expect(response.body.data[0].lastViewedAt).toEqual(expect.any(String));
   });
-}, 30_000);
+});
