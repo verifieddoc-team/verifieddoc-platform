@@ -2,7 +2,7 @@ import type { User } from "@prisma/client";
 
 export type PublicUser = Pick<User, "id" | "email" | "firstName" | "lastName" | "role" | "createdAt" | "updatedAt">;
 
-export function toPublicUser(user: User): PublicUser {
+export function toPublicUser(user: PublicUser): PublicUser {
   return {
     id: user.id,
     email: user.email,
