@@ -13,7 +13,7 @@ export interface AdminBootstrapInput {
 }
 
 export interface AdminBootstrapResult {
-  status: "created" | "promoted" | "unchanged";
+  status: "created" | "unchanged";
   email: string;
 }
 
@@ -40,9 +40,15 @@ export function validateAdminBootstrapInput(input: AdminBootstrapInput): {
 }
 
 export async function bootstrapPlatformAdmin(input: AdminBootstrapInput): Promise<AdminBootstrapResult> {
-  const { email, password } = validateAdminBootstrapInput(input);
-  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  if (!input.allowBootstrap) {
+    throw new Error("Admin bootstrap is disabled. Set ALLOW_ADMIN_BOOTSTRAP=true to run this command.");
+  }
 
+  if (!input.email?.trim()) {
+    throw new Error("ADMIN_EMAIL is required.");
+  }
+
+  const email = validateEmail(input.email);
   const existingUser = await prisma.user.findUnique({
     where: { email }
   });
@@ -58,20 +64,12 @@ export async function bootstrapPlatformAdmin(input: AdminBootstrapInput): Promis
     };
   }
 
-  if (existingUser) {
-    await prisma.user.update({
-      where: { id: existingUser.id },
-      data: {
-        role: PlatformRole.PLATFORM_ADMIN,
-        passwordHash
-      }
-    });
-
-    return {
-      status: "promoted",
-      email
-    };
+  if (!input.password?.trim()) {
+    throw new Error("ADMIN_PASSWORD is required.");
   }
+
+  const password = validatePassword(input.password);
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
   await prisma.user.create({
     data: {
