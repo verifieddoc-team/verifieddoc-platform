@@ -391,4 +391,114 @@ describe("Organization onboarding and membership", () => {
     expect(auditLog).not.toBeNull();
     expect(auditLog?.details).toMatchObject({ decision: "APPROVE" });
   });
+
+  it("normalizes mixed-case slugs before validation", async () => {
+    const applicant = await registerAndAuthenticate(app);
+    const slugSuffix = randomUUID().slice(0, 8);
+    const mixedCaseSlug = `${TEST_ORG_SLUG_PREFIX}-Acme-Ltd-${slugSuffix}`;
+
+    const response = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${applicant.accessToken}`)
+      .send(
+        createOrganizationPayload({
+          slug: mixedCaseSlug,
+          name: "Acme Limited"
+        })
+      );
+
+    expect(response.status).toBe(201);
+    expect(response.body.organization.slug).toBe(mixedCaseSlug.toLowerCase());
+  });
+
+  it("treats mixed-case and lowercase slugs as duplicates", async () => {
+    const firstApplicant = await registerAndAuthenticate(app);
+    const slugSuffix = randomUUID().slice(0, 8);
+    const mixedCaseSlug = `${TEST_ORG_SLUG_PREFIX}-Acme-Ltd-${slugSuffix}`;
+
+    const firstResponse = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${firstApplicant.accessToken}`)
+      .send(createOrganizationPayload({ slug: mixedCaseSlug, name: "Acme Alpha" }));
+
+    expect(firstResponse.status).toBe(201);
+
+    const secondApplicant = await registerAndAuthenticate(app);
+    const duplicateResponse = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${secondApplicant.accessToken}`)
+      .send(createOrganizationPayload({ slug: mixedCaseSlug.toLowerCase(), name: "Acme Beta" }));
+
+    expect(duplicateResponse.status).toBe(409);
+    expect(duplicateResponse.body.error.code).toBe("SLUG_ALREADY_EXISTS");
+  });
+
+  it("accepts valid https website URLs", async () => {
+    const applicant = await registerAndAuthenticate(app);
+
+    const response = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${applicant.accessToken}`)
+      .send(
+        createOrganizationPayload({
+          website: "https://northwind.example.test/training"
+        })
+      );
+
+    expect(response.status).toBe(201);
+    expect(response.body.organization.website).toBe("https://northwind.example.test/training");
+  });
+
+  it("rejects unsafe website URL schemes", async () => {
+    const applicant = await registerAndAuthenticate(app);
+    const unsafeWebsites = [
+      "javascript:alert(1)",
+      "data:text/html,hello",
+      "file:///etc/passwd",
+      "ftp://northwind.example.test"
+    ];
+
+    for (const website of unsafeWebsites) {
+      const response = await request(app)
+        .post("/api/v1/organizations")
+        .set("Authorization", `Bearer ${applicant.accessToken}`)
+        .send(createOrganizationPayload({ website }));
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("rejects unexpected properties on organization applications", async () => {
+    const applicant = await registerAndAuthenticate(app);
+
+    const response = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${applicant.accessToken}`)
+      .send({
+        ...createOrganizationPayload(),
+        promotedToPlatformAdmin: true
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects unexpected properties on organization review requests", async () => {
+    const applicant = await registerAndAuthenticate(app);
+    const application = await applyForOrganization(app, applicant.accessToken);
+    const organizationId = application.response.body.organization.id as string;
+    const { accessToken } = await createPlatformAdminSession(app);
+
+    const response = await request(app)
+      .patch(`/api/v1/admin/organizations/${organizationId}/review`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        decision: "APPROVE",
+        forceVerified: true
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
 });
