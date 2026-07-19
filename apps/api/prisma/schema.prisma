@@ -10,14 +10,18 @@ datasource db {
 enum PlatformRole {
   HOLDER
   VERIFIER
+  PLATFORM_ADMIN
+}
+
+enum OrganizationRole {
   ORGANIZATION_ADMIN
   ORGANIZATION_ISSUER
-  PLATFORM_ADMIN
 }
 
 enum OrganizationStatus {
   PENDING
   VERIFIED
+  REJECTED
   SUSPENDED
 }
 
@@ -40,6 +44,7 @@ model User {
   shareLinks      ShareLink[]
   auditLogs       AuditLog[]           @relation("AuditActor")
   refreshTokens  RefreshToken[]
+  reviewedOrganizations Organization[] @relation("OrganizationReviewer")
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 }
@@ -64,25 +69,38 @@ model RefreshToken {
 }
 
 model Organization {
-  id          String               @id @default(cuid())
-  name        String
-  slug        String               @unique
-  emailDomain String?
-  status      OrganizationStatus   @default(PENDING)
-  members     OrganizationMember[]
-  credentials Credential[]
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id                 String               @id @default(cuid())
+  name               String
+  slug               String               @unique
+  emailDomain        String?
+  registrationNumber String?
+  website            String?
+  contactEmail       String
+  country            String
+  description        String?
+  rejectionReason    String?
+  reviewedAt         DateTime?
+  reviewedById       String?
+  status             OrganizationStatus   @default(PENDING)
+  members            OrganizationMember[]
+  credentials        Credential[]
+  reviewedBy         User?                @relation("OrganizationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([contactEmail])
 }
 
 model OrganizationMember {
-  id             String       @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
   userId         String
-  role           PlatformRole
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt      DateTime     @default(now())
+  role           OrganizationRole
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime         @default(now())
 
   @@unique([organizationId, userId])
 }
