@@ -161,3 +161,33 @@ Demo seed creates a verified organization, memberships, active/expired/revoked c
 - Use `GET /health` for lightweight process liveness only.
 - Configure `PUBLIC_WEB_URL` for invitation and share-link URL generation.
 - Use explicit CORS origins in production; wildcard credentialed CORS is rejected.
+
+## Client environment configuration
+
+### Web
+
+```dotenv
+VITE_API_BASE_URL=http://localhost:4000/api/v1
+VITE_DEMO_MODE=true
+```
+
+Set `VITE_DEMO_MODE=false` for production. The web server must rewrite
+application routes such as `/verify/*`, `/app/*`, and `/invitations/accept` to
+`index.html`.
+
+### Mobile
+
+```dotenv
+EXPO_PUBLIC_API_BASE_URL=http://192.168.1.10:4000/api/v1
+EXPO_PUBLIC_DEMO_MODE=true
+```
+
+Replace the example LAN address with the development computer address. Set
+`EXPO_PUBLIC_DEMO_MODE=false` in production.
+
+### Shared contracts
+
+Both clients import safe response contracts from `@verifieddoc/contracts`.
+Add public response fields there before consuming them in either client. Do not
+copy Prisma models into the clients because database records include internal
+fields that must never cross the API boundary.

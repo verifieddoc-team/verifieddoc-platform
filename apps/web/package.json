@@ -1,0 +1,29 @@
+{
+  "name": "@verifieddoc/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@verifieddoc/contracts": "0.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.31.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.38.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.0"
+  }
+}
