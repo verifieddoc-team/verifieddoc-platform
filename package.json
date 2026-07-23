@@ -5,11 +5,15 @@
   "description": "Employer and organization credential verification platform",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "npm run dev --workspace=@verifieddoc/api",
+    "dev": "npm run dev:api",
+    "dev:api": "npm run dev --workspace=@verifieddoc/api",
+    "dev:web": "npm run dev --workspace=@verifieddoc/web",
+    "dev:mobile": "npm run start --workspace=@verifieddoc/mobile",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "validate": "npm run db:generate --workspace=@verifieddoc/api && npm run lint && npm run typecheck && npm test && npm run build"
   },
   "engines": { "node": ">=22" }
 }

@@ -1,0 +1,29 @@
+{
+  "name": "@verifieddoc/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@verifieddoc/contracts": "0.1.0",
+    "expo": "~57.0.8",
+    "expo-camera": "~57.0.3",
+    "expo-secure-store": "~57.0.1",
+    "react": "19.2.8",
+    "react-native": "0.86.0",
+    "react-native-qrcode-svg": "6.3.21",
+    "react-native-svg": "15.15.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

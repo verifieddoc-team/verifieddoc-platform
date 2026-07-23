@@ -13,9 +13,9 @@ VerifiedDoc is an employer and organization credential verification platform. Au
 ## Repository structure
 
 - `apps/api`: TypeScript REST API
-- `apps/web`: web client placeholder
-- `apps/mobile`: mobile client placeholder
-- `packages/contracts`: shared API contracts placeholder
+- `apps/web`: React and Vite responsive web application
+- `apps/mobile`: Expo and React Native holder application
+- `packages/contracts`: shared, safe TypeScript API contracts
 - `docs`: product, API, security, and team documentation
 - `design`: exported design assets and handoff notes
 
@@ -47,6 +47,52 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Start the web application
+
+Copy the example environment file, then start Vite:
+
+```powershell
+Copy-Item apps\web\.env.example apps\web\.env
+npm run dev:web
+```
+
+```bash
+cp apps/web/.env.example apps/web/.env
+npm run dev:web
+```
+
+The web application opens at `http://localhost:5173`. Its default development
+configuration enables fictional demo workspaces. Set `VITE_DEMO_MODE=false`
+when validating the public verification and authentication flows exclusively
+against the API.
+
+## Start the mobile application
+
+Copy the example environment file, then start Expo:
+
+```powershell
+Copy-Item apps\mobile\.env.example apps\mobile\.env
+npm run dev:mobile
+```
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env
+npm run dev:mobile
+```
+
+Use the LAN address of the API in `EXPO_PUBLIC_API_BASE_URL` when testing on a
+physical phone. `localhost` on a phone refers to the phone, not the development
+computer.
+
+## Fictional product demo
+
+- Web role workspaces: Holder, Organization, Verifier, and Platform Admin
+- Mobile holder wallet: sign-in, credential detail, sharing, QR, and verification
+- Public verification token: `DEMO-VERIFIED-2026`
+- Demo data domain: `@example.test`
+
+The demo does not require real personal or organization data.
 
 ### POSIX (bash/zsh)
 
@@ -109,6 +155,11 @@ Disable bootstrap immediately afterward by setting `ALLOW_ADMIN_BOOTSTRAP=false`
 ## Integration guide
 
 See [docs/API-INTEGRATION.md](docs/API-INTEGRATION.md) for authentication, roles, endpoint groups, pagination, sharing, invitations, and demo-data rules.
+
+See [docs/FINAL-PRODUCT-HANDOFF.md](docs/FINAL-PRODUCT-HANDOFF.md) for the
+completed scope, team ownership boundaries, screen map, testing checklist, and
+safe modification workflow. See [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) for
+the final presentation sequence.
 
 ## Collaboration
 
