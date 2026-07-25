@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@jest/globals";
 import { verifyDemoToken } from "./demo";
 
 describe("mobile demo verification", () => {
