@@ -20,7 +20,3 @@ npm run start --workspace=@verifieddoc/mobile
 
 Copy `.env.example` to `.env` before connecting to a deployed API. Demo mode is
 enabled by default and never requires real personal data.
-
-## Project structure
-
-This project uses [Expo Router](https://docs.expo.dev/router/introduction) with file-based routing. Screens live in `src/app/`, reusable UI in `src/components/`, and business logic in `src/services/`.
