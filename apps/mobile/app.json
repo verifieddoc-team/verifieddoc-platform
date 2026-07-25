@@ -1,18 +1,26 @@
 {
   "expo": {
-    "name": "mobile-app",
-    "slug": "mobile-app",
-    "version": "1.0.0",
+    "name": "VerifiedDoc",
+    "slug": "verifieddoc",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobileapp",
+    "scheme": "verifieddoc",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.verifieddocteam.verifieddoc",
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.verifieddocteam.verifieddoc",
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F7F3EA",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -28,15 +36,28 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#F7F3EA",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow VerifiedDoc to scan credential verification QR codes."
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c11ab27e-5c2a-4f72-adf2-e39f3f2b00fa"
+      }
     }
   }
 }
