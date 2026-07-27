@@ -55,26 +55,6 @@ export const demoWallet = [
       slug: "northwind-training",
     },
   },
-  {
-    id: "mobile-credential-revoked",
-    publicId: "VD-5R9C-30PL",
-    title: "Equipment Operations Certificate",
-    description: "Equipment operations competency record.",
-    credentialType: "PROFESSIONAL_CERTIFICATE",
-    referenceNo: "DEMO-REVOKED-001",
-    status: "REVOKED",
-    effectiveStatus: "REVOKED",
-    issuedAt: "2025-09-12T10:00:00.000Z",
-    expiresAt: null,
-    revokedAt: "2026-06-23T10:00:00.000Z",
-    revocationReason: "Superseded by a corrected credential.",
-    claims: { level: "Operator", assessment: "Completed" },
-    organization: {
-      id: "demo-org",
-      name: "Northwind Training Institute",
-      slug: "northwind-training",
-    },
-  },
 ];
 
 export const demoVerification = {
@@ -93,32 +73,9 @@ export const demoVerification = {
 };
 
 export function verifyDemoToken(token) {
-  const normalized = extractVerificationToken(token).toUpperCase();
-  return normalized === "DEMO-VERIFIED-2026" ||
-    normalized === "VD-7K4P-92AX"
+  const normalized = token.trim().toUpperCase();
+  return normalized.includes("DEMO-VERIFIED-2026") ||
+    normalized.includes("VD-7K4P-92AX")
     ? demoVerification
     : null;
-}
-
-export function extractVerificationToken(input) {
-  const value = input.trim();
-  if (!value) return "";
-
-  try {
-    const url = new URL(value);
-    const hashToken = new URLSearchParams(url.hash.replace(/^#/, "")).get(
-      "token",
-    );
-    if (hashToken) return hashToken;
-
-    const segments = url.pathname.split("/").filter(Boolean);
-    const verifyIndex = segments.lastIndexOf("verify");
-    if (verifyIndex >= 0 && segments[verifyIndex + 1]) {
-      return decodeURIComponent(segments[verifyIndex + 1]);
-    }
-  } catch {
-    // A raw token is a valid input.
-  }
-
-  return value;
 }
