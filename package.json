@@ -3,7 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "description": "Employer and organization credential verification platform",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "apps/mobile",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "npm run dev:api",
     "dev:api": "npm run dev --workspace=@verifieddoc/api",
@@ -15,5 +20,13 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "validate": "npm run db:generate --workspace=@verifieddoc/api && npm run lint && npm run typecheck && npm test && npm run build"
   },
-  "engines": { "node": ">=22" }
+  "devDependencies": {
+    "react-native-svg": "15.15.4"
+  },
+  "overrides": {
+    "react-native-svg": "15.15.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }

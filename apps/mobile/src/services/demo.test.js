@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { verifyDemoToken } from "./demo";
+import { extractVerificationToken, verifyDemoToken } from "./demo";
 
 describe("mobile demo verification", () => {
   it("recognizes a token inside a verification URL", () => {
@@ -12,5 +12,13 @@ describe("mobile demo verification", () => {
 
   it("keeps unknown tokens generic", () => {
     expect(verifyDemoToken("unknown-token")).toBeNull();
+  });
+
+  it("extracts a token from a verification URL", () => {
+    expect(
+      extractVerificationToken(
+        "https://verifieddoc.example.test/verify/DEMO-VERIFIED-2026",
+      ),
+    ).toBe("DEMO-VERIFIED-2026");
   });
 });

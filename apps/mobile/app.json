@@ -16,11 +16,10 @@
       "package": "com.verifieddocteam.verifieddoc",
       "permissions": [
         "CAMERA",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.CAMERA"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#F7F3EA",
+        "backgroundColor": "#F7F2FA",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -36,7 +35,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F7F3EA",
+          "backgroundColor": "#F7F2FA",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }

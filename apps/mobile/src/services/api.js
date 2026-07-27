@@ -28,6 +28,7 @@ async function request(path, options = {}, accessToken) {
       response.status,
     );
   }
+  if (response.status === 204) return undefined;
   return await response.json();
 }
 
@@ -38,8 +39,30 @@ export const mobileApi = {
       body: JSON.stringify({ email, password }),
     });
   },
+  refresh(refreshToken) {
+    return request("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    });
+  },
+  logout(refreshToken) {
+    return request("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    });
+  },
+  me(accessToken) {
+    return request("/auth/me", {}, accessToken);
+  },
   wallet(accessToken) {
     return request("/credentials?page=1&limit=50", {}, accessToken);
+  },
+  credential(accessToken, credentialId) {
+    return request(
+      `/credentials/${encodeURIComponent(credentialId)}`,
+      {},
+      accessToken,
+    );
   },
   createShareLink(accessToken, credentialId, input) {
     return request(
@@ -51,7 +74,25 @@ export const mobileApi = {
       accessToken,
     );
   },
+  shareLinks(accessToken, credentialId) {
+    return request(
+      `/credentials/${encodeURIComponent(credentialId)}/share-links`,
+      {},
+      accessToken,
+    );
+  },
+  revokeShareLink(accessToken, credentialId, shareLinkId) {
+    return request(
+      `/credentials/${encodeURIComponent(credentialId)}/share-links/${encodeURIComponent(shareLinkId)}/revoke`,
+      { method: "PATCH" },
+      accessToken,
+    );
+  },
   verify(token) {
     return request(`/verify/${encodeURIComponent(token)}`);
   },
 };
+
+export function getMobileApiBaseUrl() {
+  return baseUrl;
+}

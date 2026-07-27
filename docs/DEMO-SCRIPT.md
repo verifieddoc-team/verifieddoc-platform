@@ -2,11 +2,16 @@
 
 ## Preparation
 
-1. Start PostgreSQL, the API, the web client, and the mobile client.
-2. Apply migrations and optionally load the fictional demo seed.
-3. Confirm `/api/v1/health`, `/api/v1/ready`, and `/docs`.
-4. Open the web landing page and the mobile holder app.
-5. Use only fictional `@example.test` data.
+1. Use the connected environment for the primary demonstration.
+2. Confirm Supabase contains all nine migrations and the fictional demo seed.
+3. Confirm the Render API `/api/v1/health`, `/api/v1/ready`, and `/docs`.
+4. Confirm the web client points to the Render API through
+   `VITE_API_BASE_URL`.
+5. Confirm the mobile client points to the same API through
+   `EXPO_PUBLIC_API_BASE_URL`.
+6. Keep the explicit fictional demo mode available only as a presentation
+   fallback.
+7. Use only fictional `@example.test` data.
 
 Public demonstration token:
 
