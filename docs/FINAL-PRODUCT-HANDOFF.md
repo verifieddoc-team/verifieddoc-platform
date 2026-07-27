@@ -18,22 +18,21 @@ issuing organization remains the source of truth.
 | --- | --- | --- | --- |
 | Registration and login | Complete | Connected | Login connected |
 | Platform and organization roles | Complete | Role workspaces | Holder scope |
-| Organization application and review | Complete | Demonstration workspace | Not in holder app |
-| Member invitations and management | Complete | Demonstration workspace | Not in holder app |
-| Credential issuance and revocation | Complete | Demonstration workspace | Read-only holder wallet |
-| Holder credential wallet | Complete | Demonstration workspace | Connected |
-| Consent-based share links | Complete | Demonstration workflow | Demonstration workflow |
+| Organization application and review | Complete | Connected | Not in holder app |
+| Member invitations and management | Complete | Connected | Not in holder app |
+| Credential issuance and revocation | Complete | Connected | Read-only holder wallet |
+| Holder credential wallet | Complete | Connected | Connected |
+| Consent-based share links | Complete | Connected | Connected with QR |
 | Public verification | Complete | Connected | Connected with QR scanner |
-| Organization and platform audit logs | Complete | Demonstration workspace | Not applicable |
-| Health, readiness, seed, and admin bootstrap | Complete | Status workspace | Not applicable |
+| Organization and platform audit logs | Complete | Connected | Share-link activity only |
+| Health, readiness, seed, and admin bootstrap | Complete | Connected status workspace | Not applicable |
 | Shared safe response contracts | Complete | Used | Used |
 
-The web and mobile clients include fictional interactive data so Product,
+The web and mobile clients include an explicit fictional mode so Product,
 Design, Frontend, Mobile, QA, and stakeholders can review the complete
-experience without collecting real data. Authentication, public verification,
-and the mobile holder wallet have direct API integration points. Remaining
-operational client mutations are isolated behind the client API layer and can
-be connected without changing backend rules.
+experience without collecting real data. Normal sign-in connects all supported
+workflows to the API and PostgreSQL. Fictional mode never silently replaces a
+failed live request.
 
 ## 3. Architecture
 
@@ -119,6 +118,7 @@ flowchart TD
 - Consent sharing and QR display
 - QR scanning and manual verification
 - Profile and sign out
+- Share-link activity
 
 ## 6. Local run order
 
@@ -197,7 +197,7 @@ applies migrations, and runs the complete monorepo gate.
 - Make mobile changes only in `apps/mobile`.
 - Keep tokens in Expo Secure Store.
 - Preserve camera permission fallback and manual verification.
-- Connect share-link creation through `apps/mobile/src/api.ts`.
+- Connect share-link creation through `apps/mobile/src/services/api.js`.
 
 ### Backend
 

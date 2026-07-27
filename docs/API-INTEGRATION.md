@@ -154,7 +154,11 @@ Demo seed creates a verified organization, memberships, active/expired/revoked c
 
 ## Web and mobile integration rules
 
-- Store access tokens in memory or secure platform storage; never persist refresh tokens in plain text in untrusted storage.
+- Mobile stores the session in Expo Secure Store using the device-only unlocked
+  accessibility class.
+- The current web token-response contract uses tab-scoped `sessionStorage`,
+  never persistent `localStorage`. Treat a future HTTP-only cookie design as a
+  production hardening item.
 - Use the fragment-based invitation flow in browser clients.
 - Treat verification and invitation failures as generic unavailable states.
 - Use `GET /ready` for deployment health checks that require database connectivity.
@@ -171,7 +175,9 @@ VITE_API_BASE_URL=http://localhost:4000/api/v1
 VITE_DEMO_MODE=true
 ```
 
-Set `VITE_DEMO_MODE=false` for production. The web server must rewrite
+Set `VITE_DEMO_MODE=false` if production should hide the fictional demo entry
+points. Live sign-in and public verification use the API even when demo entry
+points are visible. The web server must rewrite
 application routes such as `/verify/*`, `/app/*`, and `/invitations/accept` to
 `index.html`.
 

@@ -48,9 +48,28 @@ export interface Organization {
   updatedAt: string;
 }
 
+export type AdminOrganization = Organization & {
+  reviewedById: string | null;
+};
+
 export interface OrganizationMembershipView {
   organization: Organization;
   membershipRole: OrganizationRole;
+}
+
+export interface CreateOrganizationInput {
+  name: string;
+  slug: string;
+  registrationNumber?: string;
+  website?: string;
+  contactEmail: string;
+  country: string;
+  description?: string;
+}
+
+export interface ReviewOrganizationInput {
+  decision: "APPROVE" | "REJECT";
+  rejectionReason?: string;
 }
 
 export interface OrganizationMemberProfile {
@@ -91,6 +110,21 @@ export interface SafeCredential {
   };
 }
 
+export interface IssueCredentialInput {
+  holderEmail: string;
+  title: string;
+  credentialType: string;
+  referenceNo: string;
+  description?: string;
+  issuedAt: string;
+  expiresAt?: string;
+  claims?: SafeClaims;
+}
+
+export interface RevokeCredentialInput {
+  reason: string;
+}
+
 export interface ShareLinkSummary {
   id: string;
   createdAt: string;
@@ -113,6 +147,14 @@ export interface CreateShareLinkResponse {
   verificationUrl: string;
 }
 
+export interface CreateShareLinkInput {
+  expiresInHours: number;
+  maxViews?: number;
+  disclosedClaims?: string[];
+  includeHolderName?: boolean;
+  includeReferenceNo?: boolean;
+}
+
 export interface InvitationSummary {
   id: string;
   email: string;
@@ -123,6 +165,24 @@ export interface InvitationSummary {
   revokedAt: string | null;
   state: InvitationState;
   invitationUrl?: string;
+}
+
+export interface CreateInvitationInput {
+  email: string;
+  role: OrganizationRole;
+  expiresInHours?: number;
+}
+
+export interface CreateInvitationResponse {
+  invitation: InvitationSummary;
+  token: string;
+  invitationPath: string;
+  invitationUrl: string;
+}
+
+export interface AcceptInvitationResponse {
+  organizationId: string;
+  membershipRole: OrganizationRole;
 }
 
 export interface PublicVerifiedCredential {
@@ -178,4 +238,15 @@ export interface ApiErrorPayload {
     message: string;
     details?: Record<string, unknown>;
   };
+}
+
+export interface ServiceHealth {
+  status: "ok";
+  service: string;
+  version: string;
+}
+
+export interface ServiceReadiness {
+  status: "ready";
+  service: string;
 }

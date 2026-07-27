@@ -30,8 +30,21 @@ import {
   navigate,
   routeForRole,
 } from "./lib/navigation";
+import {
+  RealAdminWorkspace,
+  RealHolderWorkspace,
+  RealInvitationAcceptPage,
+  RealOrganizationWorkspace,
+  RealVerifierWorkspace,
+} from "./RealWorkspaces";
+import {
+  clearWebSession,
+  readWebSession,
+  saveWebSession,
+} from "./lib/session";
 
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
+let sessionRefreshPromise: Promise<AuthSession> | null = null;
 
 type Notice = { message: string; tone: "success" | "warning" | "info" };
 
@@ -116,12 +129,22 @@ function LandingPage({ onDemo }: { onDemo: (role: DemoRole) => void }) {
   const [verification, setVerification] =
     useState<PublicVerificationResponse | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  function verify(event: FormEvent) {
+  async function verify(event: FormEvent) {
     event.preventDefault();
-    const result = verifyDemoToken(token);
-    setVerification(result);
-    setUnavailable(!result);
+    setLoading(true);
+    setUnavailable(false);
+    try {
+      const demoResult = verifyDemoToken(token);
+      const result = demoResult ?? await api.verifyCredential(token.trim());
+      setVerification(result);
+    } catch {
+      setVerification(null);
+      setUnavailable(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function useDemoToken() {
@@ -263,7 +286,9 @@ function LandingPage({ onDemo }: { onDemo: (role: DemoRole) => void }) {
                 placeholder="Enter verification token"
                 autoComplete="off"
               />
-              <button type="submit">Verify now</button>
+              <button type="submit" disabled={loading || !token.trim()}>
+                {loading ? "Checking..." : "Verify now"}
+              </button>
             </div>
           </form>
           <small>Only holder-approved information is disclosed.</small>
@@ -1200,30 +1225,34 @@ function InvitationAcceptPage({ onExit }: { onExit: () => void }) {
 function PublicVerificationPage() {
   const initialToken = window.location.pathname.split("/verify/")[1] ?? "";
   const [token, setToken] = useState(decodeURIComponent(initialToken));
-  const [result, setResult] = useState<PublicVerificationResponse | null>(
-    demoMode && initialToken ? verifyDemoToken(decodeURIComponent(initialToken)) : null,
-  );
-  const [unavailable, setUnavailable] = useState(Boolean(initialToken && !result));
+  const [result, setResult] = useState<PublicVerificationResponse | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function verify(event: FormEvent) {
-    event.preventDefault();
+  async function verifyToken(value: string) {
     setLoading(true);
     setUnavailable(false);
     try {
-      if (demoMode) {
-        const response = verifyDemoToken(token);
-        setResult(response);
-        setUnavailable(!response);
-      } else {
-        setResult(await api.verifyCredential(token));
-      }
+      const demoResult = verifyDemoToken(value);
+      const response = demoResult ?? await api.verifyCredential(value.trim());
+      setResult(response);
     } catch {
       setResult(null);
       setUnavailable(true);
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    if (initialToken) {
+      void verifyToken(decodeURIComponent(initialToken));
+    }
+  }, []);
+
+  async function verify(event: FormEvent) {
+    event.preventDefault();
+    await verifyToken(token);
   }
 
   return (
@@ -1239,7 +1268,7 @@ function PublicVerificationPage() {
             <button className="primary-button" type="submit" disabled={loading}>{loading ? "Checking..." : "Verify credential"}</button>
           </form>
         </section>
-        <VerificationResult result={result} unavailable={unavailable} onDemo={() => { setToken("DEMO-VERIFIED-2026"); setResult(verifyDemoToken("DEMO-VERIFIED-2026")); setUnavailable(false); }} />
+        <VerificationResult result={result} unavailable={unavailable} onDemo={() => { const demo = "DEMO-VERIFIED-2026"; setToken(demo); void verifyToken(demo); }} />
       </div>
     </div>
   );
@@ -1268,7 +1297,8 @@ function NoticeBar({ notice, onClose }: { notice: Notice; onClose: () => void })
 
 export function App() {
   const pathname = usePathname();
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(() => readWebSession());
+  const [restoringSession, setRestoringSession] = useState(() => Boolean(readWebSession()));
   const [demoRole, setDemoRole] = useState<DemoRole | null>(null);
 
   const currentRole = useMemo<DemoRole | null>(
@@ -1276,7 +1306,42 @@ export function App() {
     [demoRole, session],
   );
 
+  useEffect(() => {
+    const stored = readWebSession();
+    if (!stored) {
+      setRestoringSession(false);
+      return;
+    }
+
+    let active = true;
+    sessionRefreshPromise ??= api
+      .refresh(stored.refreshToken)
+      .finally(() => {
+        sessionRefreshPromise = null;
+      });
+
+    sessionRefreshPromise
+      .then((refreshed) => {
+        if (!active) return;
+        saveWebSession(refreshed);
+        setSession(refreshed);
+      })
+      .catch(() => {
+        if (!active) return;
+        clearWebSession();
+        setSession(null);
+      })
+      .finally(() => {
+        if (active) setRestoringSession(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   function openDemo(role: DemoRole) {
+    clearWebSession();
     setSession(null);
     setDemoRole(role);
     navigate(routeForRole(role));
@@ -1285,21 +1350,56 @@ export function App() {
   function acceptSession(nextSession: AuthSession) {
     setDemoRole(null);
     setSession(nextSession);
-    navigate(routeForRole(nextSession.user.role));
+    saveWebSession(nextSession);
+    const hasPendingInvitation = Boolean(
+      window.sessionStorage.getItem("verifieddoc.pendingInvitationToken"),
+    );
+    navigate(hasPendingInvitation ? "/invitations/accept" : routeForRole(nextSession.user.role));
   }
 
   function exit() {
+    const current = session;
     setSession(null);
     setDemoRole(null);
+    clearWebSession();
+    if (current) {
+      void api.logout(current.refreshToken).catch(() => undefined);
+    }
     navigate("/");
   }
 
+  if (restoringSession) {
+    return (
+      <div className="simple-page">
+        <section className="simple-card">
+          <span className="loading-spinner" />
+          <h1>Restoring your secure session</h1>
+          <p>VerifiedDoc is rotating the stored refresh token before loading account data.</p>
+        </section>
+      </div>
+    );
+  }
+
   if (pathname.startsWith("/verify")) return <PublicVerificationPage />;
-  if (pathname === "/invitations/accept") return <InvitationAcceptPage onExit={exit} />;
+  if (pathname === "/invitations/accept") {
+    return session
+      ? <RealInvitationAcceptPage session={session} />
+      : demoRole
+        ? <InvitationAcceptPage onExit={exit} />
+        : <RealInvitationAcceptPage session={null} />;
+  }
   if (pathname === "/auth") return <AuthPage onSession={acceptSession} onDemo={openDemo} />;
-  if (pathname === "/app/holder" && currentRole) return <HolderWorkspace onExit={exit} />;
-  if (pathname === "/app/organization" && currentRole) return <OrganizationWorkspace onExit={exit} />;
-  if (pathname === "/app/verifier" && currentRole) return <VerifierWorkspace onExit={exit} />;
-  if (pathname === "/app/admin" && currentRole) return <AdminWorkspace onExit={exit} />;
+  if (pathname === "/app/holder" && session) return <RealHolderWorkspace session={session} onExit={exit} />;
+  if (pathname === "/app/organization" && session) return <RealOrganizationWorkspace session={session} onExit={exit} />;
+  if (pathname === "/app/verifier" && session) return <RealVerifierWorkspace session={session} onExit={exit} />;
+  if (pathname === "/app/admin" && session?.user.role === "PLATFORM_ADMIN") return <RealAdminWorkspace session={session} onExit={exit} />;
+  if (pathname === "/app/holder" && demoRole) return <HolderWorkspace onExit={exit} />;
+  if (pathname === "/app/organization" && demoRole) return <OrganizationWorkspace onExit={exit} />;
+  if (pathname === "/app/verifier" && demoRole) return <VerifierWorkspace onExit={exit} />;
+  if (pathname === "/app/admin" && demoRole) return <AdminWorkspace onExit={exit} />;
+  if (pathname.startsWith("/app/") && !currentRole) {
+    navigate("/auth");
+    return null;
+  }
   return <LandingPage onDemo={openDemo} />;
 }
