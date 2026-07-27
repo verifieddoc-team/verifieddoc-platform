@@ -1,179 +1,108 @@
 # VerifiedDoc
 
-VerifiedDoc is an employer and organization credential verification platform. Authorized organizations issue credentials, holders share them with consent, and verifiers confirm status through a secure link or QR code.
+**Status:** API complete and functional on the `develop` branch. Web client is built and populated on `develop`, with partial live integration to the API. Mobile client scaffolding exists on `develop`, but no application screens have been built yet — see MVP Scope below for the full per-client breakdown. None of this is yet merged to `main`. Public deployment is not yet live.
 
-## MVP principles
+*(Visual helper — screenshot, architecture diagram, or badge set: pending, no visual assets exist in the repository yet)*
 
-- The issuing organization is the source of truth.
-- Verification is based on structured records, not visual inspection of uploaded files.
-- Holders control sharing through consent and expiring links.
+VerifiedDoc is an employer and organization credential verification platform. Approved Issuing Organizations create structured credential records for registered Credential Holders. Credential Holders decide what to disclose through limited, consent-based share links. Employers and other Verifiers confirm the live issuer-backed record through a secure link or QR-code scan, then make their own independent decision, replacing phone calls, emails, and manual document review with a single trusted verification step.
+
+VerifiedDoc does not inspect uploaded documents with AI, issue credentials on behalf of institutions, or decide whether a candidate should be hired. The Issuing Organization remains the source of truth.
+
+## Table of Contents
+
+- [Core Principles](#core-principles)
+- [MVP Scope and Features](#mvp-scope-and-features)
+- [User Roles](#user-roles)
+- [Technology Stack](#technology-stack)
+- [Repository Structure](#repository-structure)
+- [Developer Instructions](#developer-instructions)
+  - [Prerequisites](#prerequisites)
+  - [Local Installation and Setup](#local-installation-and-setup)
+  - [Expected Outcome](#expected-outcome)
+  - [Running the Web and Mobile Apps](#running-the-web-and-mobile-apps)
+  - [Database Setup and Migrations](#database-setup-and-migrations)
+  - [Running Tests](#running-tests)
+  - [Troubleshooting](#troubleshooting)
+- [Building on VerifiedDoc](#building-on-verifieddoc)
+- [API Documentation](#api-documentation)
+- [Demo Accounts and Testing Data](#demo-accounts-and-testing-data)
+- [Security and Privacy Considerations](#security-and-privacy-considerations)
+- [Known Limitations and Open Issues](#known-limitations-and-open-issues)
+- [Contribution Workflow](#contribution-workflow)
+- [Team and Contributions](#team-and-contributions)
+- [Support](#support)
+- [License](#license)
+
+## Core Principles
+
+- The Issuing Organization is the source of truth. Only Platform Administrator-approved organizations may issue credentials.
+- Verification relies on structured records, not visual inspection of uploaded files.
+- Credential Holders control sharing through consent-based, expiring links.
 - Every sensitive action is auditable.
-- Development and demonstrations use fictional data only.
+- Platform roles and organization membership roles remain separate.
+- Every tenant-scoped query is restricted by organization membership.
 
-## Repository structure
+## MVP Scope and Features
 
-- `apps/api`: TypeScript REST API
-- `apps/web`: React and Vite responsive web application
-- `apps/mobile`: Expo and React Native holder application
-- `apps/mobile-old`: archived pre-Router mobile reference, excluded from active workspaces
-- `packages/contracts`: shared, safe TypeScript API contracts
-- `docs`: product, API, security, and team documentation
+The API implements the full feature set below. Web client integration varies by feature. The mobile app currently has no built screens; supporting service code exists but is not yet connected to any interface.
 
-## Start the API
+| Capability | API | Web | Mobile |
+|---|---|---|---|
+| Registration and login | Complete | Connected | Service code exists (`session.js`); no screen built |
+| Platform and organization roles | Complete | Role workspaces | Not present in app |
+| Organization application and review | Complete | Demonstration workspace | Not present in app |
+| Member invitations and management | Complete | Demonstration workspace | Not present in app |
+| Credential issuance and revocation | Complete | Demonstration workspace | Not present in app |
+| Holder credential wallet | Complete | Demonstration workspace | Service code exists (`api.js`); no screen built |
+| Consent-based share links | Complete | Demonstration workflow | Not present in app |
+| Public verification | Complete | Connected | Service code exists (`demo.js`); no screen built |
+| Organization and platform audit logs | Complete | Demonstration workspace | Not applicable |
+| Health, readiness, seed, and admin bootstrap | Complete | Status workspace | Not applicable |
 
-### Windows PowerShell
+"Demonstration workspace" means the interface exists and can be reviewed, but does not yet perform live write operations against the API. "Connected" means the feature is fully wired to the live API. The mobile app currently shows only Expo's default, unedited starter screen (`src/app/index.jsx`); no login, wallet, share-link, or verification screens have been built, though supporting service files (`api.js`, `session.js`, `demo.js`) exist in `src/services`.
 
-```powershell
-npm install
-Copy-Item apps\api\.env.example apps\api\.env
-npm run db:generate --workspace=@verifieddoc/api
-npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
-npm run dev
-```
+**QR-code verification:** the Credential Holder generates a QR code from a consent-based sharing link, and the Verifier scans it to confirm the credential. This is implemented and confirmed by Backend as a completed MVP feature at the API level. It is not yet reachable through any mobile screen.
 
-Optional fictional demo seed:
+**Explicitly excluded from this MVP:**
+- Integration with external institutions or third-party verification services (WAEC, NYSC, university, or government systems)
+- Automated email notifications
+- Password recovery
+- Downloadable verification reports and advanced analytics dashboards
+- OCR or AI-based document authenticity detection
+- Additional credential types beyond the current MVP set
+- Production bot protection
+- Production app-store signing and release automation
 
-```powershell
-$env:ALLOW_DEMO_SEED = "true"
-$env:DEMO_PASSWORD = "DemoPass1!"
-npm run db:seed --workspace=@verifieddoc/api
-```
+## User Roles
 
-Run tests:
+- **Credential Holder** — registers, views, shares, and manages their own credentials. (Usage guide: pending)
+- **Verifier** — verifies credential status through a secure link or QR-code scan. (Usage guide: pending)
+- **Issuing Organization** — registers, submits for approval, and issues credentials to Credential Holders. (Usage guide: pending)
+- **Platform Administrator** — monitors platform activity and approves organizations.
 
-```powershell
-npm run validate
-```
+## Technology Stack
 
-## Start the web application
+- **Web:** React with Vite and TypeScript. Built and populated on `develop`; not yet merged to `main`.
+- **Mobile:** React Native with Expo (SDK 57, `expo ~57.0.8`) and Expo Router. Project is scaffolded on `develop`; application screens are not yet built.
+- **API:** Express (Node.js with TypeScript), `express ^5.1.0`.
+- **Database:** PostgreSQL, accessed through Prisma (`@prisma/client ^6.12.0`). Nine migrations applied.
 
-Copy the example environment file, then start Vite:
+## Repository Structure
 
-```powershell
-Copy-Item apps\web\.env.example apps\web\.env
-npm run dev:web
-```
+- `apps/api` — backend API. Contains the Prisma schema, source code, and a test suite of eight files covering authentication, credentials, organizations, invitations, share links, platform operations, and health/logging checks.
+- `apps/web` — web client. Populated on `develop` with a complete Vite/React/TypeScript project. Depends on `@verifieddoc/contracts`.
+- `apps/mobile` — mobile client. Expo Router project scaffolding exists (`_layout.jsx`, default `index.jsx`) along with service-layer code (`src/services/api.js`, `session.js`, `demo.js`), but no application screens have been built. Does not currently depend on `@verifieddoc/contracts`.
+- `apps/mobile-old` — a second, undocumented mobile folder present alongside `apps/mobile`. Contains a full separate project structure of its own — `package.json`, `README.md`, `app.json`, `tsconfig.json`, `.env.example`, `index.js`, `expo-env.d.ts`, a `src` folder, and a single 47KB `App.tsx` file — plus two zero-byte files (`cd`, `code`) that appear to be an accidental commit. Purpose and disposition pending confirmation from Backend.
+- `packages/contracts` — shared API request and response type definitions. Currently a dependency of `apps/web` only; not yet used by `apps/api` or `apps/mobile`. Whether mobile is intended to adopt it is pending confirmation from Backend.
+- `docs` — contains `TEAM-HANDOFF.md`, `API-INTEGRATION.md`, `DEMO-SCRIPT.md`, and `FINAL-PRODUCT-HANDOFF.md`, covering team ownership, integration rules, demo guidance, and full product handoff. Distinct from the `/openapi.json` and `/docs` (Swagger UI) API routes described below.
 
-```bash
-cp apps/web/.env.example apps/web/.env
-npm run dev:web
-```
+## Developer Instructions
 
-The web application opens at `http://localhost:5173`. Its default development
-configuration enables fictional demo workspaces. Set `VITE_DEMO_MODE=false`
-when validating the public verification and authentication flows exclusively
-against the API.
+### Prerequisites
 
-## Start the mobile application
+- Node.js version 22 or higher
+- Repository access: public for read access; write access requires an accepted collaborator invite to the verifieddoc-team organization (carried over from an earlier draft — not verified against actual GitHub organization settings this session)
 
-Copy the example environment file, then start Expo:
+### Local Installation and Setup
 
-```powershell
-Copy-Item apps\mobile\.env.example apps\mobile\.env
-npm run dev:mobile
-```
-
-```bash
-cp apps/mobile/.env.example apps/mobile/.env
-npm run dev:mobile
-```
-
-Use the LAN address of the API in `EXPO_PUBLIC_API_BASE_URL` when testing on a
-physical phone. `localhost` on a phone refers to the phone, not the development
-computer.
-
-## Fictional product demo
-
-- Web role workspaces: Holder, Organization, Verifier, and Platform Admin
-- Mobile holder wallet: sign-in, credential detail, sharing, QR, and verification
-- Public verification token: `DEMO-VERIFIED-2026`
-- Demo data domain: `@example.test`
-
-The demo does not require real personal or organization data.
-
-### POSIX (bash/zsh)
-
-```bash
-npm install
-cp apps/api/.env.example apps/api/.env
-npm run db:generate --workspace=@verifieddoc/api
-npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
-npm run dev
-```
-
-Optional fictional demo seed:
-
-```bash
-ALLOW_DEMO_SEED=true DEMO_PASSWORD='DemoPass1!' npm run db:seed --workspace=@verifieddoc/api
-```
-
-Run tests:
-
-```bash
-npm run validate
-```
-
-## PostgreSQL
-
-Start a local PostgreSQL instance with a database matching `DATABASE_URL` in `apps/api/.env`. The default example uses:
-
-```text
-postgresql://verifieddoc:verifieddoc@localhost:5432/verifieddoc?schema=public
-```
-
-Apply migrations after generating Prisma Client:
-
-```bash
-npm run db:generate --workspace=@verifieddoc/api
-npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
-```
-
-## API URLs
-
-- API base: `http://localhost:4000/api/v1`
-- Liveness: `http://localhost:4000/api/v1/health`
-- Readiness: `http://localhost:4000/api/v1/ready`
-- Swagger UI: `http://localhost:4000/docs`
-- OpenAPI JSON: `http://localhost:4000/openapi.json`
-
-## Platform admin bootstrap
-
-For controlled first-time platform admin creation:
-
-```bash
-ALLOW_ADMIN_BOOTSTRAP=true ADMIN_EMAIL=admin@example.test ADMIN_PASSWORD='AdminPass1!' npm run db:bootstrap-admin --workspace=@verifieddoc/api
-```
-
-Disable bootstrap immediately afterward by setting `ALLOW_ADMIN_BOOTSTRAP=false` or removing it from the environment.
-
-## Integration guide
-
-See [docs/API-INTEGRATION.md](docs/API-INTEGRATION.md) for authentication, roles, endpoint groups, pagination, sharing, invitations, and demo-data rules.
-
-See [docs/FINAL-PRODUCT-HANDOFF.md](docs/FINAL-PRODUCT-HANDOFF.md) for the
-completed scope, team ownership boundaries, screen map, testing checklist, and
-safe modification workflow. See [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) for
-the final presentation sequence.
-
-The final presentation PRD is [docs/PRD-v2-FINAL.md](docs/PRD-v2-FINAL.md).
-
-## Render deployment
-
-The repository includes `render.yaml` for a Node API service and a Vite static
-web service. The API build generates Prisma Client, compiles TypeScript, applies
-migrations in the pre-deploy step, starts from `dist/src/server.js`, and uses
-`/api/v1/ready` as its database-aware health check.
-
-Configure these values in Render without committing their values:
-
-- API: `DATABASE_URL`, `CORS_ORIGINS`, `PUBLIC_WEB_URL`
-- Web: `VITE_API_BASE_URL`
-
-`JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are generated by the Blueprint.
-`CORS_ORIGINS` must contain the deployed web origin without a trailing slash.
-`PUBLIC_WEB_URL` must contain the same public web origin so generated
-verification and invitation links open the correct client.
-
-## Collaboration
-
-Create work from an issue, branch from `develop`, and open a pull request back to `develop`. Do not commit directly to `main` or `develop`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+1. Clone the repository.
