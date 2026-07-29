@@ -3,6 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/poppins": "^0.4.1",
     "@expo/ui": "~57.0.7",
     "expo": "~57.0.8",
     "expo-camera": "~57.0.3",
@@ -43,7 +45,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-     "test": "jest"
+    "test": "jest"
   },
   "private": true
 }
