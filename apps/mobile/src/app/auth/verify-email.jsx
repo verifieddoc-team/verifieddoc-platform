@@ -85,14 +85,14 @@ export default function VerifyEmailScreen() {
         <OTPInput value={otp} onChange={setOtp} hasError={!!otpError} />
         {otpError ? <Text style={styles.errorText}>{otpError}</Text> : null}
 
-        <CountdownTimer
-          durationSeconds={TIMER_DURATION_SECONDS}
-          resetKey={timerResetKey}
-          onExpire={handleTimerExpire}
-        />
+     <CountdownTimer
+  key={timerResetKey}
+  durationSeconds={TIMER_DURATION_SECONDS}
+  onExpire={handleTimerExpire}
+/>
 
         <View style={styles.resendRow}>
-          <Text style={styles.resendPrompt}>Didn't receive the code? </Text>
+<Text style={styles.resendPrompt}>Didn&apos;t receive the code? </Text>
           <Pressable onPress={handleResendCode} disabled={!isTimerExpired} hitSlop={8}>
             <Text
               style={[

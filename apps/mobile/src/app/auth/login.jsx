@@ -237,7 +237,7 @@ export default function LoginScreen() {
 
         {/* Bottom sign-up prompt */}
         <View style={styles.bottomTextRow}>
-          <Text style={styles.bottomText}>Don't have an account? </Text>
+          <Text style={styles.bottomText}>Don&apos;t have an account? </Text>
           <Pressable onPress={handleCreateAccount} hitSlop={8}>
             <Text style={styles.bottomLink}>Create Account</Text>
           </Pressable>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Text, StyleSheet } from "react-native";
 import { COLORS } from "../../constants/theme";
 
@@ -7,15 +7,8 @@ function formatTime(totalSeconds) {
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
-
-export default function CountdownTimer({ durationSeconds = 205, resetKey, onExpire }) {
+export default function CountdownTimer({ durationSeconds = 205, onExpire }) {
   const [secondsLeft, setSecondsLeft] = useState(durationSeconds);
-  const intervalRef = useRef(null);
-
-  // Restart the countdown whenever resetKey changes (e.g. after "Resend code")
-  useEffect(() => {
-    setSecondsLeft(durationSeconds);
-  }, [resetKey, durationSeconds]);
 
   useEffect(() => {
     if (secondsLeft <= 0) {
@@ -23,11 +16,11 @@ export default function CountdownTimer({ durationSeconds = 205, resetKey, onExpi
       return;
     }
 
-    intervalRef.current = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       setSecondsLeft((prev) => prev - 1);
     }, 1000);
 
-    return () => clearTimeout(intervalRef.current);
+    return () => clearTimeout(timeoutId);
   }, [secondsLeft, onExpire]);
 
   return (
