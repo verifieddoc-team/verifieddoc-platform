@@ -1,4 +1,3 @@
-// src/app/auth/sign-up.jsx
 import React, { useState } from "react";
 import {
   View,
@@ -128,10 +127,20 @@ export default function SignUpScreen() {
   };
 
   const handleCreateAccount = () => {
-    if (!validate()) return;
-    // No backend yet — this is where the sign-up API call will go.
-    console.log("Sign up payload:", { accountType: selectedRoleKey, ...form });
-  };
+  if (!validate()) return;
+
+  console.log("Sign up payload:", {
+    accountType: selectedRoleKey,
+    ...form,
+  });
+
+  router.push({
+    pathname: "/auth/verify-email",
+    params: {
+      email: form.workEmail,
+    },
+  });
+};
 
   if (!fontsLoaded) return null;
 
