@@ -117,8 +117,6 @@ QR-code verification: the Credential Holder generates a QR code from a consent-b
 
 ### Prerequisites
 
-### Prerequisites
-
 - Node.js version 22 or higher.
 - Docker and Docker Compose, for running PostgreSQL locally.
 - Repository access: public for read access; write access requires an accepted collaborator invite to the `verifieddoc-team` organization. (This detail was carried over from an earlier draft and has not been verified against actual GitHub organization settings this session.)
