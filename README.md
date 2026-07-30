@@ -18,6 +18,7 @@ VerifiedDoc does not inspect uploaded documents with AI, issue credentials on be
 
 ## Table of Contents
 
+- [The Problem It Solves](#the-problem-it-solves)
 - [Core Principles](#core-principles)
 - [MVP Scope and Features](#mvp-scope-and-features)
 - [User Roles](#user-roles)
@@ -26,6 +27,7 @@ VerifiedDoc does not inspect uploaded documents with AI, issue credentials on be
 - [Developer Instructions](#developer-instructions)
   - [Prerequisites](#prerequisites)
   - [Local Installation and Setup](#local-installation-and-setup)
+  - [Environment Variables](#environment-variables)
   - [Expected Outcome](#expected-outcome)
   - [Running the Web and Mobile Apps](#running-the-web-and-mobile-apps)
 - [Database Setup and Migrations](#database-setup-and-migrations)
@@ -36,6 +38,7 @@ VerifiedDoc does not inspect uploaded documents with AI, issue credentials on be
 - [Demo Accounts and Testing Data](#demo-accounts-and-testing-data)
 - [Security and Privacy Considerations](#security-and-privacy-considerations)
 - [Known Limitations and Open Issues](#known-limitations-and-open-issues)
+- [Authentication Flow](#authentication-flow)
 - [Contribution Workflow](#contribution-workflow)
 - [Team and Contributions](#team-and-contributions)
 - [Support](#support)
@@ -114,9 +117,11 @@ QR-code verification: the Credential Holder generates a QR code from a consent-b
 
 ### Prerequisites
 
-- Node.js version 22 or higher.
-- Repository access: public for read access; write access requires an accepted collaborator invite to the `verifieddoc-team` organization. (This detail was carried over from an earlier draft and has not been verified against actual GitHub organization settings this session.)
+### Prerequisites
 
+- Node.js version 22 or higher.
+- Docker and Docker Compose, for running PostgreSQL locally.
+- Repository access: public for read access; write access requires an accepted collaborator invite to the `verifieddoc-team` organization. (This detail was carried over from an earlier draft and has not been verified against actual GitHub organization settings this session.)
 ### Local Installation and Setup
 
 1. Clone the repository.
