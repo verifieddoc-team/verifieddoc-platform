@@ -1,6 +1,8 @@
+// src/app/dashboard/more.jsx
 import React from "react";
 import { View, ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import {
   useFonts,
   Poppins_600SemiBold,
@@ -23,6 +25,7 @@ const MENU_ITEMS = [
 ];
 
 export default function MoreScreen() {
+  const router = useRouter();
   const { user, logout } = useAuth?.() ?? { user: null, logout: null };
 
   const [fontsLoaded] = useFonts({
@@ -35,8 +38,13 @@ export default function MoreScreen() {
   if (!fontsLoaded) return null;
 
   const handleMenuPress = (key) => {
-    // TODO: wire up navigation for each destination once those screens exist.
-    // e.g. router.push(`/dashboard/more/${key}`)
+    if (key === "organisation-portal") {
+      router.push("/organisation");
+      return;
+    }
+
+    // TODO: wire up navigation for the remaining destinations once those
+    // screens exist (Activity Log, Security & Keys, Help & Support).
     console.log("More menu pressed:", key);
   };
 

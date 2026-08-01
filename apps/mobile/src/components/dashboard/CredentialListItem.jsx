@@ -1,4 +1,3 @@
-// src/components/dashboard/CredentialListItem.jsx
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";

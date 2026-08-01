@@ -1,4 +1,3 @@
-// src/components/dashboard/DashboardHeader.jsx
 import React from "react";
 import { View, Text, Image, StyleSheet } from "react-native";
 import { COLORS, SPACING } from "../../constants/theme";
