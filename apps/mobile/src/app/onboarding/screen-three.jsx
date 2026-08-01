@@ -23,14 +23,14 @@ export default function OnboardingScreenThree() {
     Inter_500Medium,
   });
 
-  const handleSkip = () => {
-    router.replace("/auth/sign-in");
+   const handleSkip = () => {
+    router.replace("/auth/login");
   };
   const handleGetStarted = () => {
     router.push("/auth/sign-up");
   };
   const handleSignIn = () => {
-    router.push("/auth/sign-in");
+    router.push("/auth/login");
   };
 
   if (!fontsLoaded) return null;
