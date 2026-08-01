@@ -15,3 +15,18 @@ export const authRateLimiter = rateLimit({
     });
   }
 });
+
+export const publicVerificationRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: env.NODE_ENV === "test" ? 10000 : 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many verification attempts, please try again later"
+      }
+    });
+  }
+});

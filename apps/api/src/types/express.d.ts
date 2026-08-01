@@ -1,4 +1,4 @@
-import type { PlatformRole } from "@prisma/client";
+import type { OrganizationRole, PlatformRole } from "@prisma/client";
 
 declare global {
   namespace Express {
@@ -8,6 +8,11 @@ declare global {
         email: string;
         role: PlatformRole;
       };
+      organizationMembership?: {
+        organizationId: string;
+        role: OrganizationRole;
+      };
+      validatedQuery?: unknown;
     }
   }
 }

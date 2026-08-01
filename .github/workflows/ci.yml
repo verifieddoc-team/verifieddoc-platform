@@ -6,7 +6,7 @@ on:
     branches: [main, develop]
 
 jobs:
-  api:
+  quality:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -36,6 +36,7 @@ jobs:
       - run: npm ci
       - run: npm run db:generate --workspace=@verifieddoc/api
       - run: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

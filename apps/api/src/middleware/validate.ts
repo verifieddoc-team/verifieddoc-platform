@@ -7,3 +7,10 @@ export function validateBody<T>(schema: ZodType<T>) {
     next();
   };
 }
+
+export function validateQuery<T>(schema: ZodType<T>) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    req.validatedQuery = schema.parse(req.query);
+    next();
+  };
+}
