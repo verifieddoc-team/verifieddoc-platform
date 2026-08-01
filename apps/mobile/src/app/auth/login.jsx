@@ -69,6 +69,7 @@ export default function LoginScreen() {
       password,
       rememberMe,
     });
+     router.push("/dashboard");
   };
 
   if (!fontsLoaded) return null;
