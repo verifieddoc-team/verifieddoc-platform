@@ -1,3 +1,4 @@
+// src/components/dashboard/BottomTabBar.jsx
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -60,6 +61,8 @@ export default function BottomTabBar({ state, navigation }) {
               <Text
                 style={[styles.label, isActive && styles.labelActive]}
                 numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
               >
                 {label}
               </Text>
@@ -86,21 +89,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   iconWrap: {
+    // Fixed width/height (not padding-driven, not minWidth) so every tab —
+    // regardless of label length ("Home" vs "Manage") — renders an
+    // identically-shaped pill. This is what was causing the border radius
+    // to look inconsistent between tabs: the box was previously sized by
+    // its content, so the same radius value read as "very rounded" on the
+    // short "Home" label and "barely rounded" on wider ones like "Manage".
+    width: 68,
+    height: 58,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    minWidth: 72,
+    borderRadius: 16,
+    overflow: "hidden", // guarantees the gold fill is clipped to the radius
   },
   iconWrapActive: {
     backgroundColor: COLORS.accent,
   },
   label: {
     fontFamily: "Inter_500Medium",
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.primary,
     marginTop: 3,
+    maxWidth: 60,
   },
   labelActive: {
     color: COLORS.surface,
