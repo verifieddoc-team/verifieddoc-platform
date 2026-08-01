@@ -1,38 +1,37 @@
-// src/components/dashboard/BottomTabBar.jsx
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { COLORS, SPACING } from "../../constants/theme";
 
-const TAB_ICONS = {
-  index: "home",
-  issue: "verified",
-  manage: "manage-accounts",
-  more: "more-horiz",
-};
-
-const TAB_LABELS = {
-  index: "Home",
-  issue: "Issue",
-  manage: "Manage",
-  more: "More",
+// Default config matches the Organisation dashboard's route names, kept
+// here so existing call sites that don't pass `tabsConfig` keep working.
+const DEFAULT_TABS_CONFIG = {
+  index: { icon: "home", label: "Home" },
+  issue: { icon: "verified", label: "Issue" },
+  manage: { icon: "manage-accounts", label: "Manage" },
+  more: { icon: "more-horiz", label: "More" },
 };
 
 /**
- * Custom tabBar renderer for an Expo Router <Tabs> navigator.
- * Matches the reference design: active tab gets a gold pill with a
- * white icon/label, inactive tabs are plain primary-blue.
+ * Shared tabBar renderer for any Expo Router <Tabs> navigator in the app
+ * (Organisation dashboard, Verifier dashboard, etc). Visual styling —
+ * gold pill on the active tab, fixed pill dimensions — stays identical
+ * across every role; only the icon/label per route differs.
+ *
+ * @param tabsConfig  { [routeName]: { icon: MaterialIconName, label: string } }
+ *                    Defaults to the Organisation dashboard's tabs if omitted.
  */
-export default function BottomTabBar({ state, navigation }) {
+export default function BottomTabBar({ state, navigation, tabsConfig = DEFAULT_TABS_CONFIG }) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.wrapper, { paddingBottom: insets.bottom || SPACING.sm }]}>
       {state.routes.map((route, index) => {
         const isActive = state.index === index;
-        const iconName = TAB_ICONS[route.name] ?? "circle";
-        const label = TAB_LABELS[route.name] ?? route.name;
+        const config = tabsConfig[route.name];
+        const iconName = config?.icon ?? "circle";
+        const label = config?.label ?? route.name;
 
         const onPress = () => {
           const event = navigation.emit({
