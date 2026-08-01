@@ -21,7 +21,7 @@ export default function RecentVerifications({
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
-        <Text style={styles.heading}>Recently Issued</Text>
+        <Text style={styles.heading}>Recent Verifications</Text>
         {hasItems ? (
           <Pressable onPress={onViewAll} hitSlop={8}>
             <Text style={styles.viewAll}>View all</Text>
