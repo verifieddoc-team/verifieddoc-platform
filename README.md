@@ -272,12 +272,17 @@ See Building on VerifiedDoc, above, and `CONTRIBUTING.md` for full details. Note
 
 ## Team and Contributions
 
-(Pending: current team roster and responsibilities from Product Management.)
-
+Project Management Lead – Adenike (Project coordination, planning, documentation, stakeholder communication)
+Product Management Team – Product research, PRD, backlog, sprint planning, feature prioritization, UAT, go-to-market strategy
+Product Design Team – User research support, user flows, wireframes, UI design, prototype
+Backend Team – API development, database, business logic, authentication
+Frontend Team – Web application interface implementation
+Mobile Development Team – Mobile application implementation
+Technical Writing Team – User guides, README, release notes, product documentation
 ## Support
 
-(Pending: confirm preferred contact channel.)
+Contact: VerifiedDoc Support Team. This is a capstone project without a live support channel.
 
 ## License
 
-(Pending: no LICENSE file currently exists in the repository. Confirm licensing status with Product Management.)
+No LICENSE file is included in this repository. This is intentional for the capstone project.
