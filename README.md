@@ -2,7 +2,7 @@
 
 **Status:** API complete and functional on the `develop` branch. Web client is built and populated on `develop`, with partial live integration to the API.Mobile screens exist on develop across authentication, dashboard, organization, and verifier flows, though several are still stub screens with placeholder content rather than functional features. See MVP Scope below for the full per-client breakdown. Web and mobile are both merged to main, though main currently lags behind develop in mobile screen coverage.
 
-(Visual helper: screenshot, architecture diagram, or badge set. This is pending; no visual assets exist in the repository yet.)
+**Release Notes:** See [docs/RELEASE-NOTES-v1.0.md](docs/RELEASE-NOTES-v1.0.md) for the full version history.
 
 VerifiedDoc is an employer and organization credential verification platform. Approved Issuing Organizations create structured credential records for registered Credential Holders. Credential Holders decide what to disclose through limited, consent-based share links. Employers and other Verifiers confirm the live issuer-backed record through a secure link or QR-code scan, then make their own independent decision, replacing phone calls, emails, and manual document review with a single trusted verification step.
 
