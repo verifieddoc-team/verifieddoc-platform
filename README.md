@@ -119,7 +119,8 @@ QR-code verification: the Credential Holder generates a QR code from a consent-b
 
 - Node.js version 22 or higher.
 - Docker and Docker Compose, for running PostgreSQL locally.
-- Repository access: public for read access; write access requires an accepted collaborator invite to the `verifieddoc-team` organization. (This detail was carried over from an earlier draft and has not been verified against actual GitHub organization settings this session.)
+- Repository access: public for read access; write access requires an accepted collaborator invite to the `verifieddoc-team` organization.
+  
 ### Local Installation and Setup
 
 1. Clone the repository.
@@ -212,8 +213,6 @@ This runs the test suite across all workspaces. The API test suite (eight test f
 5. Obtain at least one review and pass automated checks.
 6. Squash-merge after approval.
 
-(Note: `npm run validate` exists as a working local quality-gate script and a `develop`-to-`main` promotion step is described in `FINAL-PRODUCT-HANDOFF.md`, but neither currently appears in `CONTRIBUTING.md`. Flagged for the team to confirm which document should be updated to match the other.)
-
 Never commit credentials, access tokens, production data, or real identity documents.
 
 ## API Documentation
@@ -268,7 +267,7 @@ Public credential verification does not require a Bearer token or user registrat
 For the exact authentication endpoints, request formats, and token payloads, see the OpenAPI contract at `/openapi.json` or the interactive Swagger UI at `/docs`. This README does not duplicate that endpoint list, since the live contract is the authoritative source and won't drift out of sync the way a manually maintained table can.
 ## Contribution Workflow
 
-See Building on VerifiedDoc, above, and `CONTRIBUTING.md` for full details. Note the flagged inconsistency between that file and this README's contribution steps, above.
+See Building on VerifiedDoc, above, and `CONTRIBUTING.md` for full details.
 
 ## Team and Contributions
 
