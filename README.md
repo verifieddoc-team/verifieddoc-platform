@@ -271,7 +271,7 @@ See Building on VerifiedDoc, above, and `CONTRIBUTING.md` for full details.
 
 ## Team and Contributions
 
-Project Management Lead – Adenike (Project coordination, planning, documentation, stakeholder communication)
+Project Management Team – Project coordination, planning, documentation, stakeholder communication
 Product Management Team – Product research, PRD, backlog, sprint planning, feature prioritization, UAT, go-to-market strategy
 Product Design Team – User research support, user flows, wireframes, UI design, prototype
 Backend Team – API development, database, business logic, authentication
