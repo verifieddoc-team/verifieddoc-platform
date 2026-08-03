@@ -17,7 +17,7 @@ import PaginationDots from "../components/PaginationDots";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
-/* ─────────────────── Slide Data ─────────────────── */
+/* ─────────────────── Slide Data ────────────────── */
 const SLIDES = [
   {
     id: "1",
