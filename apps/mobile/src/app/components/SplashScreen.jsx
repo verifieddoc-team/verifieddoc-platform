@@ -7,13 +7,13 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import LoadingIndicator from "./components/LoadingIndicator";
+import LoadingIndicator from "./LoadingIndicator";
 
 const { height } = Dimensions.get("window");
 
-export default function Index() {
-  const router = useRouter();
+
+export default function SplashScreen({ onFinish }) {
+  // Animation refs
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
   const titleOpacity = useRef(new Animated.Value(0)).current;
@@ -23,6 +23,7 @@ export default function Index() {
 
   useEffect(() => {
     Animated.sequence([
+      // Logo fade + scale in
       Animated.parallel([
         Animated.timing(logoOpacity, {
           toValue: 1,
@@ -36,6 +37,7 @@ export default function Index() {
           useNativeDriver: true,
         }),
       ]),
+      // Heading slides up
       Animated.parallel([
         Animated.timing(titleOpacity, {
           toValue: 1,
@@ -48,27 +50,32 @@ export default function Index() {
           useNativeDriver: true,
         }),
       ]),
+      // Spinner fades in
       Animated.timing(spinnerOpacity, {
         toValue: 1,
         duration: 250,
         useNativeDriver: true,
       }),
+      // Tagline fades in
       Animated.timing(taglineOpacity, {
         toValue: 1,
         duration: 250,
         useNativeDriver: true,
       }),
+      // Hold briefly
       Animated.delay(300),
     ]).start(() => {
-      router.replace("/dev-menu");
+      if (onFinish) onFinish();
     });
-  }, [router]);
+  }, []);
 
   return (
     <View style={styles.container}>
+      {/* Background gradient overlay dots */}
       <View style={styles.glowTop} />
       <View style={styles.glowBottom} />
 
+      {/* Logo */}
       <Animated.View
         style={[
           styles.logoWrapper,
@@ -79,29 +86,28 @@ export default function Index() {
         ]}
       >
         <Image
-          source={require("../assets/images/logo-white.png")}
+          source={require("../../../assets/images/logo-white.png")}
           style={styles.logo}
           resizeMode="contain"
         />
       </Animated.View>
 
+      {/* Title */}
       <Animated.View
         style={{
           opacity: titleOpacity,
           transform: [{ translateY: titleTranslateY }],
         }}
       >
-        <Text style={styles.title}>
-          Trusted Digital{"\n"}Credential Verification
-        </Text>
+        <Text style={styles.title}>Trusted Digital{"\n"}Credential Verification</Text>
       </Animated.View>
 
-      <Animated.View
-        style={[styles.spinnerWrapper, { opacity: spinnerOpacity }]}
-      >
+      {/* Spinner */}
+      <Animated.View style={[styles.spinnerWrapper, { opacity: spinnerOpacity }]}>
         <LoadingIndicator size={52} color="#2ECC71" thickness={4} />
       </Animated.View>
 
+      {/* Tagline */}
       <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
         Secure. Fast. Reliable
       </Animated.Text>
@@ -117,6 +123,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 32,
   },
+  // Subtle radial-like glow blobs
   glowTop: {
     position: "absolute",
     top: -80,
