@@ -1,6 +1,6 @@
 # VerifiedDoc
 
-**Status:** API complete and functional on the `develop` branch. Web client is built and populated on `develop`, with partial live integration to the API. Mobile client scaffolding exists on `develop`, but no application screens have been built yet. See MVP Scope below for the full per-client breakdown. None of this is yet merged to `main`. Public deployment is not yet live.
+**Status:** API complete and functional on the `develop` branch. Web client is built and populated on `develop`, with partial live integration to the API.Mobile screens exist on develop across authentication, dashboard, organization, and verifier flows, though several are still stub screens with placeholder content rather than functional features. See MVP Scope below for the full per-client breakdown. Web and mobile are both merged to main, though main currently lags behind develop in mobile screen coverage.
 
 (Visual helper: screenshot, architecture diagram, or badge set. This is pending; no visual assets exist in the repository yet.)
 
@@ -55,24 +55,24 @@ VerifiedDoc does not inspect uploaded documents with AI, issue credentials on be
 
 ## MVP Scope and Features
 
-The API implements the full feature set below. Web client integration varies by feature. The mobile app currently has no built screens; supporting service code exists but is not yet connected to any interface.
+The API implements the full feature set below. Web client integration varies by feature. The mobile app has screens built across authentication, dashboard, organization, and verifier flows. Screen completeness varies: some screens are wired to live data and hooks, others render placeholder content only. See the table below for the per-feature breakdown.
 
 | Capability | API | Web | Mobile |
 |---|---|---|---|
-| Registration and login | Complete | Connected (session.js) | Service code exists; no screen built |
+| Registration and login | Complete | Connected (session.js) | Service code exists; Screen exists (stub level, not functional) |
 | Platform and organization roles | Complete | Role workspaces | Not present in app |
-| Organization application and review | Complete | Demonstration workspace | Not present in app |
+| Organization application and review | Complete | Demonstration workspace |Screen exists, wired to live data hooks |
 | Member invitations and management | Complete | Demonstration workspace | Not present in app |
-| Credential issuance and revocation | Complete | Demonstration workspace | Not present in app |
+| Credential issuance and revocation | Complete | Demonstration workspace | Screen exists (stub level, not functional) |
 | Holder credential wallet | Complete | Demonstration workspace | Service code exists (api.js); no screen built |
-| Consent-based share links | Complete | Demonstration workflow | Not present in app |
-| Public verification | Complete | Connected | Service code exists (demo.js); no screen built |
+| Consent-based share links | Complete | Demonstration workflow |Service code exists; no screen built |
+| Public verification | Complete | Connected | Service code exists (demo.js); Screen exists, but explicitly marked as a placeholder in its own code |
 | Organization and platform audit logs | Complete | Demonstration workspace | Not applicable |
 | Health, readiness, seed, and admin bootstrap | Complete | Status workspace | Not applicable |
 
-"Demonstration workspace" means the interface exists and can be reviewed, but does not yet perform live write operations against the API. "Connected" means the feature is fully wired to the live API. The mobile app currently shows only Expo's default, unedited starter screen (`src/app/index.jsx`); no login, wallet, share-link, or verification screens have been built, though supporting service files (`api.js`, `session.js`, `demo.js`) exist in `src/services`.
+"Demonstration workspace" means the interface exists and can be reviewed, but does not yet perform live write operations against the API. "Connected" means the feature is fully wired to the live API. The mobile app's index.jsx no longer shows Expo's default starter screen; it redirects into the app. Screens exist for login, signup, dashboard, organization, and verification flows, but several are stub screens showing placeholder text only. No wallet screen has been built. Supporting service files (api.js, session.js, demo.js) exist in src/services.
 
-QR-code verification: the Credential Holder generates a QR code from a consent-based sharing link, and the Verifier scans it to confirm the credential. This is implemented and confirmed by Backend as a completed MVP feature at the API level. It is not yet reachable through any mobile screen.
+QR-code verification: the Credential Holder generates a QR code from a consent-based sharing link, and the Verifier scans it to confirm the credential. This is implemented and confirmed by Backend as a completed MVP feature at the API level. A verify screen exists on mobile, but it is explicitly marked as a placeholder in its own code and is not yet functional.
 
 **Explicitly excluded from this MVP:**
 
@@ -94,8 +94,8 @@ QR-code verification: the Credential Holder generates a QR code from a consent-b
 
 ## Technology Stack
 
-- **Web:** React with Vite and TypeScript. Built and populated on `develop`; not yet merged to `main`.
-- **Mobile:** React Native with Expo (SDK 57, `expo ~57.0.8`) and Expo Router. Project is scaffolded on `develop`; application screens are not yet built.
+- **Web:** React with Vite and TypeScript.Built and populated on develop, and merged to main.`.
+- **Mobile:** React Native with Expo (SDK 57, `expo ~57.0.8`) and Expo Router. Project is scaffolded on develop, with screens built across authentication, dashboard, organization, and verifier flows, several still at stub level. Merged to main, though main lags behind develop in screen coverage.
 - **API:** Express (Node.js with TypeScript), `express ^5.1.0`.
 - **Database:** PostgreSQL, accessed through Prisma (`@prisma/client ^6.12.0`). Nine migrations applied.
 
@@ -184,7 +184,7 @@ Run each client in its own terminal, separate from the API.
     npm run dev:mobile
     ```
 
-Note: the mobile app currently launches to Expo's default starter screen only.
+Note: the mobile app now launches into the app itself rather than Expo's default starter screen, though several screens still show placeholder content only.
 
 ## Database Setup and Migrations
 
@@ -245,9 +245,9 @@ Authentication uses JWT (`jsonwebtoken`), password hashing uses `bcryptjs`, requ
 
 ## Known Limitations and Open Issues
 
-- `apps/web` is built and populated on `develop`; `apps/mobile` has scaffolding and service code but no built screens. Neither is yet merged to `main`, and public deployment is not yet live.
+- apps/web is built and populated on develop, and merged to main. apps/mobile has screens built across several flows, though many remain stub-level, and is also merged to main, though main lags behind develop. Public deployment is not yet live.
 - Most operational features in the web client (organization review, invitations, credential issuance, audit logs) run in a demonstration workspace rather than connecting live to the API. Only registration/login, public verification, and system status are fully connected.
-- The mobile app currently shows only Expo's default, unedited starter screen. No login, wallet, share-link, or verification screens exist yet, despite supporting service files being present.
+- The mobile app has screens for login, dashboard, organization, and verification flows, but many are stub-level with placeholder content only. No wallet or share-link screen exists yet.
 - `packages/contracts` is currently used only by `apps/web`. Whether `apps/api` and `apps/mobile` are intended to adopt it is pending confirmation from Backend.
 - `apps/mobile-old` exists alongside `apps/mobile` as a full, separate, undocumented project. Disposition pending confirmation from Backend.
 - `CONTRIBUTING.md` does not yet reflect the `npm run validate` step or the `develop`-to-`main` promotion step described elsewhere in project documentation.
@@ -260,8 +260,8 @@ Authentication uses JWT (`jsonwebtoken`), password hashing uses `bcryptjs`, requ
 
 Credential Holders and Issuing Organizations register and log in through the API's authentication endpoints. On successful login, the API issues a JWT, which the client stores and includes as a Bearer token in the `Authorization` header on subsequent requests.
 
-On the web client, this flow is fully connected to the live API (see `session.js`). On mobile, the supporting service file (`session.js`) exists, but no login screen has been built yet, so the flow is not currently reachable on that client.
-
+On the web client, this flow is fully connected to the live API (see `session.js`). 
+On mobile, a login screen exists, but it is stub-level and not yet wired to the live API, so the flow is not currently functional on that client.
 Public credential verification does not require a Bearer token or user registration of any kind. A Verifier can confirm a credential directly through a secure link or QR-code scan.
 
 For the exact authentication endpoints, request formats, and token payloads, see the OpenAPI contract at `/openapi.json` or the interactive Swagger UI at `/docs`. This README does not duplicate that endpoint list, since the live contract is the authoritative source and won't drift out of sync the way a manually maintained table can.
