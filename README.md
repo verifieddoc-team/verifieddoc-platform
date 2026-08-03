@@ -105,7 +105,7 @@ QR-code verification: the Credential Holder generates a QR code from a consent-b
 
 `apps/web` is the web client. It is populated on `develop` with a complete Vite/React/TypeScript project and depends on `@verifieddoc/contracts`.
 
-`apps/mobile` is the mobile client. Expo Router project scaffolding exists (`_layout.jsx`, default `index.jsx`) along with service-layer code (`src/services/api.js`, `session.js`, `demo.js`), but no application screens have been built. It does not currently depend on `@verifieddoc/contracts`.
+`apps/mobile` is the mobile client. Expo Router project scaffolding exists (_layout.jsx, default index.jsx) along with screens across authentication, dashboard, organization, and verifier flows, several still at stub level, plus service-layer code (src/services/api.js, session.js, demo.js). It does not currently depend on @verifieddoc/contracts.
 
 `apps/mobile-old` is a second, undocumented mobile folder present alongside `apps/mobile`. It contains a full separate project structure of its own: `package.json`, `README.md`, `app.json`, `tsconfig.json`, `.env.example`, `index.js`, `expo-env.d.ts`, a `src` folder, and a single 47KB `App.tsx` file, plus two zero-byte files (`cd`, `code`) that appear to be an accidental commit. Its purpose and disposition are pending confirmation from Backend.
 
