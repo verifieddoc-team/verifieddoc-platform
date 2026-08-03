@@ -23,6 +23,7 @@ VerifiedDoc does not inspect uploaded documents with AI, issue credentials on be
 - [MVP Scope and Features](#mvp-scope-and-features)
 - [User Roles](#user-roles)
 - [Technology Stack](#technology-stack)
+- - [Architecture Overview](#architecture-overview)
 - [Repository Structure](#repository-structure)
 - [Developer Instructions](#developer-instructions)
   - [Prerequisites](#prerequisites)
@@ -99,7 +100,11 @@ QR-code verification: the Credential Holder generates a QR code from a consent-b
 - **API:** Express (Node.js with TypeScript), `express ^5.1.0`.
 - **Database:** PostgreSQL, accessed through Prisma (`@prisma/client ^6.12.0`). Nine migrations applied.
 
-- 
+- ## Architecture Overview
+
+![VerifiedDoc Architecture](IMG_7355.JPG)
+
+This diagram reflects the intended architecture and client capabilities. For what is currently built on each client, see MVP Scope and Features above.
 
 ## Repository Structure
 
