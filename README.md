@@ -99,6 +99,8 @@ QR-code verification: the Credential Holder generates a QR code from a consent-b
 - **API:** Express (Node.js with TypeScript), `express ^5.1.0`.
 - **Database:** PostgreSQL, accessed through Prisma (`@prisma/client ^6.12.0`). Nine migrations applied.
 
+- 
+
 ## Repository Structure
 
 `apps/api` is the backend API. It contains the Prisma schema, source code, and a test suite of eight files covering authentication, credentials, organizations, invitations, share links, platform operations, and health/logging checks.
