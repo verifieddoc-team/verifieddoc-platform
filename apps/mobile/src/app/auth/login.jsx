@@ -55,7 +55,7 @@ export default function LoginScreen() {
   const [rememberMe, setRememberMe] = useState(false);
 
   const handleForgotPassword = () => {
-    router.push("/auth/forgot-password");
+    router.push("/auth/forgetpassword");
   };
 
   const handleCreateAccount = () => {
