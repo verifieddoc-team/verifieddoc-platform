@@ -60,7 +60,7 @@ export default function Index() {
       }),
       Animated.delay(300),
     ]).start(() => {
-      router.replace("/dev-menu");
+      router.replace("/onboarding/screen-one");
     });
   }, [router]);
 
@@ -79,7 +79,7 @@ export default function Index() {
         ]}
       >
         <Image
-          source={require("../assets/images/logo-white.png")}
+          source={require("../../assets/images/logo-white.png")}
           style={styles.logo}
           resizeMode="contain"
         />
