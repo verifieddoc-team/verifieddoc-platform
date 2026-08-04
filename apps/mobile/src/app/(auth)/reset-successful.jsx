@@ -12,7 +12,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import BackButton from "../components/BackButton";
 
 const LOGO = require("../../../assets/images/verified doc 2.png");
-const SUCCESS_SHIELD = require("../../../assets/imaages/image 10.png");
+const SUCCESS_SHIELD = require("../../../assets/images/image 10.png");
 
 export default function ResetSuccessful() {
   const router = useRouter();
