@@ -1,6 +1,6 @@
 # VerifiedDoc Frontend API Contract
 
-Figma-derived screen flows, frontend-only routes, and screen→API matrices: **[`docs/FIGMA-USER-FLOW.md`](./FIGMA-USER-FLOW.md)**.  
+Figma-derived screen flows, frontend-only routes, and screen→API matrices: **[`docs/FIGMA-USER-FLOW.md`](./FIGMA-USER-FLOW.md)**.
 Contract gap audit: **[`docs/API-CONTRACT-AUDIT.md`](./API-CONTRACT-AUDIT.md)**.
 
 Cursor could not authenticate directly to Figma. This flow was produced from a separately verified Figma screen inventory supplied during review. The Figma file contains the relevant screens but has no configured prototype interaction links. Frontend routes in the Figma flow doc are **UI routes only** — do not invent matching backend paths.
@@ -423,14 +423,14 @@ After login/register, clients should:
 
 Rules:
 
-- `PLATFORM_ADMIN` → Admin workspace  
-- membership `ORGANIZATION_ADMIN` | `ORGANIZATION_ISSUER` → Organization workspace  
-- `VERIFIER` → Verifier workspace  
-- `HOLDER` → Holder workspace  
-- A HOLDER may also have organization memberships — **preserve Holder access** when org workspace is available  
+- `PLATFORM_ADMIN` → Admin workspace
+- membership `ORGANIZATION_ADMIN` | `ORGANIZATION_ISSUER` → Organization workspace
+- `VERIFIER` → Verifier workspace
+- `HOLDER` → Holder workspace
+- A HOLDER may also have organization memberships — **preserve Holder access** when org workspace is available
 - Organization roles come from **membership data**, never from `PlatformRole`
 
-Current web interim routes: `/app/holder`, `/app/organization`, `/app/verifier`, `/app/admin`.  
+Current web interim routes: `/app/holder`, `/app/organization`, `/app/verifier`, `/app/admin`.
 Target Figma-aligned frontend routes (not backend paths): see `docs/FIGMA-USER-FLOW.md` §2.
 
 Mobile screens that still use stubs are **implemented but not wired**.
@@ -453,24 +453,39 @@ Mobile screens that still use stubs are **implemented but not wired**.
 /admin/activity  /admin/fraud-alerts  /admin/reports
 ```
 
-Do **not** create matching `/api/v1/holder/activity` (etc.) merely because these UI routes exist.
+UI routes are not API paths. Prefer the catalog in `docs/BACKEND-ENDPOINT-CATALOG.md` when wiring screens — several Figma routes now have matching backend endpoints (e.g. `GET /holder/activity`).
 
 ### Holder dashboard field rule
 
-Live UI may show only API-backed fields from `GET /holder/dashboard`:
+Live UI may show API-backed fields from `GET /holder/dashboard`:
 
-- `stats.total` → Total Credentials  
-- `stats.active` → Active Credentials  
-- `stats.expired` → Expired Credentials  
-- `stats.revoked` → Revoked Credentials  
-- `recentCredentials` → Recent Credentials  
+- `stats.total` → Total Credentials
+- `stats.active` → Active Credentials
+- `stats.expired` → Expired Credentials
+- `stats.revoked` → Revoked Credentials
+- `stats.pendingVerifications` → Pending Verifications (additive; backend now returns this)
+- `stats.sharedThisMonth` → Shared This Month (additive; backend now returns this)
+- `recentCredentials` → Recent Credentials
+- `recentActivity` → Recent Activity (additive)
 
-Figma also shows pending verifications, shared this month, and recent activity — **do not fabricate** those until backend fields exist. Never display active/expired/revoked under those unsupported Figma labels.
+Never fabricate metric values when fields are absent from the response. Prefer additive consumption of new fields; keep older clients working without them.
 
 ---
 
-## Features not available (do not stub with fake zeros)
+## New backend endpoints (Figma / PRD completion)
 
-Password reset / OTP, verifier dashboards & histories, saved organizations, organization verification-request queues, fraud alerts, platform user admin, file uploads / registration evidence storage, holder upload-as-trusted-credential, and holder “pending verifications” / “shared this month” / activity aggregates until backed by real models and routes.
+Backend now exposes the following (paths relative to `/api/v1`). Full table: [`docs/BACKEND-ENDPOINT-CATALOG.md`](./BACKEND-ENDPOINT-CATALOG.md). Shared types: `@verifieddoc/contracts`.
 
-See `docs/API-CONTRACT-AUDIT.md` and `docs/FIGMA-USER-FLOW.md` for P0/P1 plans and design decisions.
+| Area | Endpoints (summary) |
+| --- | --- |
+| Auth profile / reset | `PATCH /auth/me`, `PATCH /auth/me/password`, `POST /auth/password-reset/{request,verify,confirm}` |
+| Holder | `GET /holder/activity`, `GET /holder/verification-requests`, `GET|POST|DELETE /holder/documents…` |
+| Verifier | `GET /verifier/dashboard`, `POST|GET /verifier/verifications`, saved-organizations, verification-requests, file-verifications |
+| Organization | `PATCH /organizations/:id`, `GET …/dashboard`, recipients + recipient-invitations, verification-requests review, registration-documents |
+| Credential artifacts | `GET /credentials/:id/artifacts`, org `…/artifacts/upload-url` + `…/complete` |
+| Admin | `GET /admin/dashboard`, users + status, verifications, verification-requests, fraud-alerts, reports summary/export |
+| Notifications | `GET /notifications`, `PATCH …/read`, `PATCH /notifications/read-all` |
+
+**Frontend wiring status:** web/mobile clients may still be demo-only or unwired for many of these paths — treat that as a frontend task. Do not invent alternate API paths for UI routes.
+
+See `docs/API-CONTRACT-AUDIT.md` and `docs/FIGMA-USER-FLOW.md` for remaining client gaps and design decisions.

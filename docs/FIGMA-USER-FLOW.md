@@ -1,8 +1,8 @@
 # VerifiedDoc — Figma-Derived User Flow
 
-**Figma file:** [VerifiedDoc — Centralized Digital Document Verification Platform](https://www.figma.com/design/QfOpHB1N0hJNz0g74uEu59/VerifiedDoc---Centralized-Digital-Document-Verification-Platform)  
-**Platform Admin dashboard node:** `862:1023`  
-**Branch context:** `fix/frontend-api-contract-alignment`  
+**Figma file:** [VerifiedDoc — Centralized Digital Document Verification Platform](https://www.figma.com/design/QfOpHB1N0hJNz0g74uEu59/VerifiedDoc---Centralized-Digital-Document-Verification-Platform)
+**Platform Admin dashboard node:** `862:1023`
+**Branch context:** `fix/frontend-api-contract-alignment`
 **Date:** 2026-08-05
 
 ## How this flow was produced
@@ -131,38 +131,38 @@ These are **frontend page routes only**.
 | Resolve workspaces | (after auth) | `GET /organizations` | Existing |
 | Refresh | — | `POST /auth/refresh` | Existing (no auto-refresh wired) |
 | Logout | — | `POST /auth/logout` | Existing |
-| Forgot password → OTP → reset → Password Updated | `/forgot-password` … `/password-updated` | *(none)* | **Backend missing** |
+| Forgot password → OTP → reset → Password Updated | `/forgot-password` … `/password-updated` | `POST /auth/password-reset/{request,verify,confirm}` | **Backend supported** (wire frontend; Resend in prod) |
 
 ### Holder
 
 | Screen / action | Frontend route | Backend API | Status |
 | --- | --- | --- | --- |
-| Dashboard | `/holder/dashboard` | `GET /holder/dashboard` | Existing — **partial shape vs Figma** |
+| Dashboard | `/holder/dashboard` | `GET /holder/dashboard` | **Backend supported** (pending/shared/activity fields additive) |
 | My Credentials | `/holder/credentials` | `GET /credentials` | Existing |
 | Credential Details | `/holder/credentials/:id` | `GET /credentials/:credentialId` | Existing |
 | Create Share Link | `/holder/share` | `POST /credentials/:credentialId/share-links` | Existing |
 | List Share Links | `/holder/share` | `GET /credentials/:credentialId/share-links` | Existing |
 | Revoke Share Link | `/holder/share` | `PATCH /credentials/:credentialId/share-links/:shareLinkId/revoke` | Existing |
-| Activity | `/holder/activity` | *(none)* | **Backend missing** |
-| Settings / profile | `/holder/settings` | `GET /auth/me` (read); no profile update API | Partial |
+| Activity | `/holder/activity` | `GET /holder/activity` | **Backend supported** (wire frontend) |
+| Settings / profile | `/holder/settings` | `GET|PATCH /auth/me`, `PATCH /auth/me/password` | **Backend supported** (wire frontend) |
 | Holder upload credential | (upload UI if present) | *(none)* | **Product decision** — conflicts with issuer-controlled trust |
 
-**Figma dashboard expects:** total credentials, pending verifications, shared this month, recent credentials, recent activity.  
-**Current API returns:** `stats.total|active|expired|revoked` + `recentCredentials`.  
-Never map `active`/`expired`/`revoked` onto unsupported Figma labels. Never fabricate pending / shared-this-month / activity.
+**Figma dashboard expects:** total credentials, pending verifications, shared this month, recent credentials, recent activity.
+**Current API returns:** `stats.total|active|expired|revoked|pendingVerifications|sharedThisMonth` + `recentCredentials` + `recentActivity`.
+Never fabricate metric values when fields are absent from a response.
 
 ### Verifier
 
 | Screen / action | Frontend route | Backend API | Status |
 | --- | --- | --- | --- |
-| Dashboard | `/verifier/dashboard` | *(none)* | **Backend missing** |
-| New Verification (token / QR) | `/verifier/verify` | `GET /verify/:token` | Existing |
-| Verification Results | `/verifier/results` | `GET /verify/:token` (one-shot) | Existing for single result; no result store |
-| Verification History | `/verifier/history` | *(none)* | **Backend missing** |
-| Saved Organizations | `/verifier/saved-organizations` | *(none)* | **Backend missing** |
-| Settings | `/verifier/settings` | `GET /auth/me` | Partial |
-| Credential-ID search | — | *(none)* | **Backend missing** |
-| Uploaded-file verification | — | *(none)* | **Backend missing** / unsupported without storage design |
+| Dashboard | `/verifier/dashboard` | `GET /verifier/dashboard` | **Backend supported** (wire frontend) |
+| New Verification (token / QR) | `/verifier/verify` | `GET /verify/:token` and/or `POST /verifier/verifications` | Existing + authenticated verify |
+| Verification Results | `/verifier/results` | public verify or authenticated verify response | Existing |
+| Verification History | `/verifier/history` | `GET /verifier/verifications` | **Backend supported** (wire frontend) |
+| Saved Organizations | `/verifier/saved-organizations` | saved-organizations CRUD | **Backend supported** (wire frontend) |
+| Settings | `/verifier/settings` | `GET|PATCH /auth/me` | **Backend supported** (wire frontend) |
+| Credential-ID search | — | `POST /verifier/verifications` method `PUBLIC_ID` | **Backend supported** |
+| Uploaded-file verification | — | file-verifications upload-url + complete | **Backend supported** (Supabase in prod) |
 
 QR codes must encode the same secure verification URL/token used by `GET /verify/:token`.
 
@@ -181,11 +181,11 @@ QR codes must encode the same secure verification URL/token used by `GET /verify
 | View issued credentials | `/organization/credentials` | `GET /organizations/:organizationId/credentials` | Existing |
 | Revoke credential | `/organization/credentials` | `PATCH .../credentials/:credentialId/revoke` | Existing |
 | Audit history | (audit UI) | `GET /organizations/:organizationId/audit-logs` | Existing |
-| Organization dashboard aggregates | `/organization/dashboard` | *(none)* | **Backend missing** |
-| Active recipient count | dashboard | *(none)* | **Backend missing** |
-| Verification request queue / approve-deny | `/organization/verification-requests` | *(none)* | **Backend missing** |
-| Registration document uploads | apply flow | *(none)* | **Backend missing** — do not implement without storage design |
-| Monthly issuance trends | dashboard | *(none)* | **Backend missing** |
+| Organization dashboard aggregates | `/organization/dashboard` | `GET /organizations/:id/dashboard` | **Backend supported** (wire frontend) |
+| Active recipient count | dashboard | included in org dashboard `stats.activeRecipients` | **Backend supported** |
+| Verification request queue / approve-deny | `/organization/verification-requests` | org verification-requests list/get/review | **Backend supported** (wire frontend) |
+| Registration document uploads | apply flow | registration-documents upload-url/complete | **Backend supported** (Supabase in prod) |
+| Monthly issuance trends | dashboard | `stats.issuedThisMonth` (not full trends series) | Partial |
 
 ### Platform Admin (node `862:1023`)
 
@@ -194,16 +194,16 @@ Figma Admin dashboard contains: Total Users, Institutions, Documents, Verificati
 | Screen / action | Frontend route | Backend API | Status |
 | --- | --- | --- | --- |
 | Admin login | `/login` | `POST /auth/login` | Existing (role must be `PLATFORM_ADMIN`) |
-| Dashboard aggregates | `/admin/dashboard` | *(none)* | **Backend missing** |
+| Dashboard aggregates | `/admin/dashboard` | `GET /admin/dashboard` | **Backend supported** (`documents` = issued credentials) |
 | Organization Approvals | `/admin/organization-approvals` | `GET /admin/organizations`, `PATCH .../review` | Existing |
-| Organization Management | `/admin/organizations` | Partial via list/review only | **Partial** |
-| Platform Activity | `/admin/activity` | `GET /admin/audit-logs` | Partial (audit ≠ full activity product) |
-| Fraud Alerts | `/admin/fraud-alerts` | *(none)* | **Backend missing** |
-| Reports | `/admin/reports` | *(none)* | **Backend missing** |
-| User management | — | *(none)* | **Backend missing** |
-| Notifications | — | *(none)* | **Backend missing** |
+| Organization Management | `/admin/organizations` | list/review + registration-document review | **Backend supported** |
+| Platform Activity | `/admin/activity` | `GET /admin/audit-logs` (+ admin verifications monitors) | Partial (audit ≠ full activity product) |
+| Fraud Alerts | `/admin/fraud-alerts` | `GET /admin/fraud-alerts` (+ status patch) | **Backend supported** (wire frontend) |
+| Reports | `/admin/reports` | `GET /admin/reports/summary`, `GET /admin/reports/export` | **Backend supported** (wire frontend) |
+| User management | — | `GET/PATCH /admin/users…` | **Backend supported** (wire frontend) |
+| Notifications | — | `GET /notifications`, mark read / read-all | **Backend supported** (wire frontend) |
 
-Treat repeated Quick Action labels “Verified Today” as unfinished design placeholders, not API fields.  
+Treat repeated Quick Action labels “Verified Today” as unfinished design placeholders, not API fields.
 Flag “Verified At” column as inconsistent for Pending/Rejected rows; recommend Updated At, Reviewed At, or Requested At.
 
 ---
@@ -212,13 +212,15 @@ Flag “Verified At” column as inconsistent for Pending/Rejected rows; recomme
 
 Backend + contracts support today (canonical `/api/v1` prefix omitted below):
 
-- Auth: register, login, refresh, logout, me  
-- Holder: dashboard (stats total/active/expired/revoked + recentCredentials), wallet list, credential detail, share-link create/list/revoke  
-- Public verify: `GET /verify/:token`  
-- Organizations: create, list memberships, get, members, invitations (+ accept/revoke), issue/list/revoke credentials, org audit logs  
-- Admin: list organizations, review (`APPROVE`/`REJECT`), platform audit logs  
+- Auth: register (HOLDER/VERIFIER/ORGANIZATION + legacy), login, refresh, logout, me, profile patch, change password, password-reset
+- Holder: dashboard (incl. pending/shared/activity), activity feed, verification requests, personal documents, wallet, share links
+- Verifier: dashboard, authenticated verify, history, saved orgs, verification requests, file-hash verify
+- Public verify: `GET /verify/:token` (records VerificationEvent)
+- Organizations: create/list/get/patch profile, dashboard, recipients + recipient-invitations, verification-request review, registration documents, members/invitations, credentials + artifacts, org audit logs
+- Admin: dashboard, org review, users/suspend, verifications/requests monitors, fraud alerts, reports/CSV, registration-document review, audit logs
+- Notifications: list + mark read
 
-Web live mode (`VITE_DEMO_MODE=false`) wires many of these; mobile clients are largely **implemented but not wired**.
+Web live mode (`VITE_DEMO_MODE=false`) wires many of the earlier endpoints; newer Figma/PRD endpoints may still need frontend wiring. Mobile clients are largely **implemented but not wired**. Full catalog: `docs/BACKEND-ENDPOINT-CATALOG.md`.
 
 ---
 
@@ -226,7 +228,7 @@ Web live mode (`VITE_DEMO_MODE=false`) wires many of these; mobile clients are l
 
 | Area | Why partial |
 | --- | --- |
-| Holder dashboard vs Figma | API has active/expired/revoked + recentCredentials; Figma wants pending verifications, shared this month, recent activity |
+| Holder dashboard vs Figma | **Backend supported:** dashboard now returns pendingVerifications, sharedThisMonth, recentActivity; frontend may still need wiring |
 | Holder settings | Read via session/`/auth/me`; no profile-update API |
 | Verifier verify → results | One-shot `GET /verify/:token` works; no persisted results/history |
 | Org “dashboard” | Credential/member/invite counts can be derived client-side from list endpoints; no official aggregate API |
@@ -277,15 +279,15 @@ Existing models remain: `User`, `RefreshToken`, `Organization`, `OrganizationMem
 
 ## 8. Design / PM decisions required
 
-1. **Brand naming:** Product is VerifiedDoc; several screens show **VerifyDoc** — pick one.  
-2. **Dashboard count:** PM materials say three primary dashboards but list four (Holder, Verifier, Organization, Admin).  
-3. **Verifier metric label:** “Total Credentials Issued” → likely “Total Verifications” (PM approval).  
-4. **Admin Quick Actions:** All say “Verified Today” — unfinished placeholders, not API fields.  
-5. **Admin table timestamp:** “Verified At” for Pending/Rejected rows — prefer Updated At / Reviewed At / Requested At.  
-6. **Holder upload:** Issuer-controlled credentials conflict with arbitrary holder uploads becoming trusted records — **product decision** before any upload API.  
-7. **Organization vs Institution:** Terms used interchangeably — standardize copy and data model language.  
-8. **MVP scope:** Figma includes features beyond the implemented backend; confirm which screens are MVP vs later.  
-9. **Holder dashboard field mapping:** Keep showing only real `stats.*` fields until pending/shared/activity are backed by data.  
+1. **Brand naming:** Product is VerifiedDoc; several screens show **VerifyDoc** — pick one.
+2. **Dashboard count:** PM materials say three primary dashboards but list four (Holder, Verifier, Organization, Admin).
+3. **Verifier metric label:** “Total Credentials Issued” → likely “Total Verifications” (PM approval).
+4. **Admin Quick Actions:** All say “Verified Today” — unfinished placeholders, not API fields.
+5. **Admin table timestamp:** “Verified At” for Pending/Rejected rows — prefer Updated At / Reviewed At / Requested At.
+6. **Holder upload:** Issuer-controlled credentials conflict with arbitrary holder uploads becoming trusted records — **product decision** before any upload API.
+7. **Organization vs Institution:** Terms used interchangeably — standardize copy and data model language.
+8. **MVP scope:** Figma includes features beyond the implemented backend; confirm which screens are MVP vs later.
+9. **Holder dashboard field mapping:** Keep showing only real `stats.*` fields until pending/shared/activity are backed by data.
 10. **Multi-workspace default:** When a HOLDER also has org membership, which workspace opens first after login?
 
 ---
@@ -315,35 +317,35 @@ Prioritized after contract-safe frontend alignment:
 
 ### P1-A — Auth recovery (only with full security design)
 
-- Hashed, expiring, single-use reset tokens and/or OTP  
-- Rate limiting + attempt limits  
-- Token/OTP invalidation on success and on abuse  
-- Secure password validation  
-- Automated tests before any production route  
+- Hashed, expiring, single-use reset tokens and/or OTP
+- Rate limiting + attempt limits
+- Token/OTP invalidation on success and on abuse
+- Secure password validation
+- Automated tests before any production route
 
 ### P1-B — Verification domain
 
-- `VerificationEvent` model (token hash, result, actor, timestamps)  
-- Verifier dashboard aggregates + history endpoints  
-- Optional SavedOrganization model  
-- Feed admin “verifications” counts from real events  
+- `VerificationEvent` model (token hash, result, actor, timestamps)
+- Verifier dashboard aggregates + history endpoints
+- Optional SavedOrganization model
+- Feed admin “verifications” counts from real events
 
 ### P1-C — Organization portal
 
-- Dashboard aggregate endpoint (issued counts, revoked, recipients) from Credential/ShareLink/Member data  
-- `VerificationRequest` model + approve/deny only if product confirms request workflow  
-- Additive holder fields (shared this month / pending) only when request/share data exists  
+- Dashboard aggregate endpoint (issued counts, revoked, recipients) from Credential/ShareLink/Member data
+- `VerificationRequest` model + approve/deny only if product confirms request workflow
+- Additive holder fields (shared this month / pending) only when request/share data exists
 
 ### P1-D — Admin analytics
 
-- Admin dashboard DTO from User/Organization/Credential/VerificationEvent counts  
-- FraudAlert + Report models after rule definition  
-- Replace placeholder Quick Actions with real, distinct actions  
+- Admin dashboard DTO from User/Organization/Credential/VerificationEvent counts
+- FraudAlert + Report models after rule definition
+- Replace placeholder Quick Actions with real, distinct actions
 
 ### Explicit non-goals until designed
 
-- Raw document uploads / registration evidence without storage, validation, authorization, metadata, malware scanning  
-- Arbitrary credential-ID public search that bypasses consent sharing  
+- Raw document uploads / registration evidence without storage, validation, authorization, metadata, malware scanning
+- Arbitrary credential-ID public search that bypasses consent sharing
 
 ---
 
@@ -385,7 +387,7 @@ flowchart LR
   NV --> T[Enter token or scan QR]
   T --> API[GET /verify/:token]
   API --> R[Verification Results]
-  R -.-> H[History - backend missing]
+  R -.-> H[History - GET /verifier/verifications]
 ```
 
 ### Organization issuance path
@@ -401,24 +403,24 @@ flowchart TD
   ISS --> LIST[List credentials]
   LIST --> REV[Revoke]
   W --> AUD[Audit logs]
-  W -.-> VR[Verification requests - missing]
+  W --> VR[Verification requests - GET/PATCH org verification-requests]
 ```
 
 ---
 
-## 12. Password recovery flow (backend missing)
+## 12. Password recovery flow (backend supported)
 
 ```text
 Login
   → Forgot Password
-  → Enter Email
+  → Enter Email          → POST /auth/password-reset/request
   → OTP
-  → Verify OTP
-  → Create New Password
+  → Verify OTP           → POST /auth/password-reset/verify
+  → Create New Password  → POST /auth/password-reset/confirm
   → Password Updated
   → Login
 ```
 
 Frontend routes: `/forgot-password`, `/verify-otp`, `/reset-password`, `/password-updated`.
 
-**Do not implement** without hashed expiring tokens/OTP, single-use enforcement, rate limiting, attempt limits, secure password validation, invalidation, and tests.
+**Backend status:** implemented with hashed OTP/reset tokens, attempt locks, rate limits, and password policy. Requires Resend (`RESEND_API_KEY`, `MAIL_FROM`) for production email delivery. Frontend screens still need wiring to these endpoints.

@@ -95,8 +95,23 @@ Workspace rules (must remain true in clients):
 | Membership-aware organization navigation | **Resolved (web):** `GET /organizations` → membership roles; platform post-login route via `routeForPlatformRole`; sidebar switch preserves Holder access when org membership exists. |
 | Access-token persistence across browser refresh | **Intentionally unchanged.** In-memory session only; no `localStorage`. |
 | Mobile screen wiring | **Unresolved P0 (mobile):** `mobileApi` ready; screens mostly stubs. |
-| Fake holder metrics (“Pending verifications”, “Shared this month”, activity) | **Not implemented** (correct). Live UI shows only real `stats.total\|active\|expired\|revoked`. Never map those onto unsupported Figma labels. |
+| Fake holder metrics (“Pending verifications”, “Shared this month”, activity) | **Backend unblocked (2026-08):** `GET /holder/dashboard` now returns real `pendingVerifications`, `sharedThisMonth`, and `recentActivity`; `GET /holder/activity` exists. Frontend may wire these additively — still must not fabricate zeros when absent. |
 | Figma-aligned frontend route tree (`/holder/*`, `/verifier/*`, …) | **Unresolved P0 (routing):** current web uses `/app/holder` etc.; target routes documented in `FIGMA-USER-FLOW.md` only. |
+
+## Backend completion of previously P0/P1 backend-blocked gaps
+
+On branch `feat/backend-figma-prd-completion`, the following gaps that were previously classified `BACKEND_ENDPOINT_MISSING` / `DATABASE_MODEL_MISSING` are **implemented on the backend** (contracts + OpenAPI updated). Remaining work is primarily **frontend wiring** and production env (Resend/Supabase):
+
+| Former gap | Backend status |
+| --- | --- |
+| Password recovery + OTP | `POST /auth/password-reset/{request,verify,confirm}` + `PasswordResetChallenge` |
+| Holder pending / shared-this-month / activity | Additive dashboard fields + `GET /holder/activity` |
+| Verifier dashboard / history / saved orgs / file verify | `/verifier/*` + `VerificationEvent`, `SavedOrganization`, `VerificationUpload` |
+| Org portal dashboard / recipients / verification requests | `/organizations/:id/dashboard`, recipients, verification-requests |
+| Registration evidence / credential artifacts | registration-documents + artifacts (Supabase in prod) |
+| Admin dashboard / users / fraud / reports / notifications | `/admin/*`, `/notifications` |
+
+See [`docs/BACKEND-ENDPOINT-CATALOG.md`](./BACKEND-ENDPOINT-CATALOG.md) and [`docs/BACKEND-FIGMA-PRD-COMPLETION.md`](./BACKEND-FIGMA-PRD-COMPLETION.md).
 
 ---
 
@@ -111,7 +126,15 @@ Workspace rules (must remain true in clients):
 | POST | `/api/v1/auth/refresh` | Public (rate-limited) | Body: `{ refreshToken }` |
 | POST | `/api/v1/auth/logout` | Public | Body: `{ refreshToken }` → 204 |
 | GET | `/api/v1/auth/me` | Bearer | |
-| GET | `/api/v1/holder/dashboard` | Bearer + `HOLDER` | Stats + 5 recent credentials |
+| PATCH | `/api/v1/auth/me` | Bearer | Profile update |
+| PATCH | `/api/v1/auth/me/password` | Bearer | Change password → 204 |
+| POST | `/api/v1/auth/password-reset/request` | Public (rate-limited) | → 202 `{ requestId }` |
+| POST | `/api/v1/auth/password-reset/verify` | Public (rate-limited) | → `{ resetToken, expiresInSeconds }` |
+| POST | `/api/v1/auth/password-reset/confirm` | Public (rate-limited) | → 204 |
+| GET | `/api/v1/holder/dashboard` | Bearer + `HOLDER` | Stats (+ pending/shared) + recent credentials + recentActivity |
+| GET | `/api/v1/holder/activity` | Bearer + `HOLDER` | Paginated activity |
+| GET | `/api/v1/holder/verification-requests` | Bearer + `HOLDER` | Paginated requests |
+| GET/POST/DELETE | `/api/v1/holder/documents…` | Bearer + `HOLDER` | Personal documents + signed upload |
 | GET | `/api/v1/credentials` | Bearer | Holder wallet (paginated) |
 | GET | `/api/v1/credentials/:credentialId` | Bearer | Holder or org issuer/admin |
 | POST | `/api/v1/credentials/:credentialId/share-links` | Bearer (holder) | |
