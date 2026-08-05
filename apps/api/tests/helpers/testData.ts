@@ -1,9 +1,11 @@
 ﻿import { randomUUID } from "node:crypto";
-import { OrganizationRole, PlatformRole, type User } from "@prisma/client";
+import { OrganizationRole, PlatformRole, Prisma, type User } from "@prisma/client";
 import type { Express } from "express";
 import request from "supertest";
+import { joinNames } from "../../src/lib/names.js";
 import { prisma } from "../../src/lib/prisma.js";
 import { createAccessToken } from "../../src/lib/tokens.js";
+import { clearMemoryStorage } from "../../src/services/storage/index.js";
 
 export const TEST_PASSWORD = "TestPass1!";
 export const TEST_PASSWORD_HASH =
@@ -79,12 +81,14 @@ export async function createTestUser(
   const lastName = overrides.lastName ?? "User";
   const role = overrides.role ?? PlatformRole.HOLDER;
 
+  const names = joinNames(firstName, lastName);
   const user = await prisma.user.create({
     data: {
       email,
       passwordHash: TEST_PASSWORD_HASH,
-      firstName,
-      lastName,
+      firstName: names.firstName,
+      lastName: names.lastName,
+      fullName: names.fullName,
       role
     }
   });
@@ -106,7 +110,72 @@ export async function createTestUser(
   };
 }
 
+async function cleanupVerificationGraphForUsers() {
+  await prisma.fraudAlert.deleteMany({
+    where: {
+      OR: [
+        { actor: testUserRelationFilter },
+        { resolvedBy: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } },
+        { verificationEvent: { verifier: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.notification.deleteMany({
+    where: { user: testUserRelationFilter }
+  });
+
+  await prisma.verificationEvent.deleteMany({
+    where: {
+      OR: [
+        { verifier: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } },
+        { shareLink: { createdBy: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.verificationUpload.deleteMany({
+    where: { verifier: testUserRelationFilter }
+  });
+
+  await prisma.personalDocument.deleteMany({
+    where: { holder: testUserRelationFilter }
+  });
+
+  await prisma.credentialArtifact.deleteMany({
+    where: {
+      OR: [
+        { uploadedBy: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.verificationRequest.deleteMany({
+    where: {
+      OR: [
+        { requestedBy: testUserRelationFilter },
+        { holder: testUserRelationFilter },
+        { reviewedBy: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.savedOrganization.deleteMany({
+    where: { verifier: testUserRelationFilter }
+  });
+}
+
 async function cleanupTestUserDependencies() {
+  await cleanupVerificationGraphForUsers();
+
   await prisma.shareLink.deleteMany({
     where: {
       OR: [
@@ -140,6 +209,32 @@ async function cleanupTestUserDependencies() {
     }
   });
 
+  await prisma.recipientInvitation.deleteMany({
+    where: {
+      OR: [
+        { email: testUserEmailFilter },
+        { invitedBy: testUserRelationFilter },
+        { acceptedBy: testUserRelationFilter },
+        { revokedBy: testUserRelationFilter }
+      ]
+    }
+  });
+
+  await prisma.organizationRecipient.deleteMany({
+    where: {
+      user: testUserRelationFilter
+    }
+  });
+
+  await prisma.organizationDocument.deleteMany({
+    where: {
+      OR: [
+        { uploadedBy: testUserRelationFilter },
+        { reviewedBy: testUserRelationFilter }
+      ]
+    }
+  });
+
   await prisma.auditLog.deleteMany({
     where: {
       actor: testUserRelationFilter
@@ -153,41 +248,114 @@ async function cleanupTestUserDependencies() {
   });
 }
 
-export async function cleanupTestOrganizations() {
+const organizationCleanupFilter = {
+  OR: [
+    testOrganizationFilter,
+    // Organizations created via ORGANIZATION registration use slugified company names.
+    { members: { some: { user: testUserRelationFilter } } },
+    { contactEmail: testUserEmailFilter }
+  ]
+};
+
+async function cleanupOrganizationsMatching(where: Prisma.OrganizationWhereInput) {
+  await prisma.fraudAlert.deleteMany({
+    where: {
+      OR: [
+        { credential: { organization: where } },
+        { verificationEvent: { organization: where } }
+      ]
+    }
+  });
+
+  await prisma.verificationEvent.deleteMany({
+    where: {
+      OR: [
+        { organization: where },
+        { credential: { organization: where } }
+      ]
+    }
+  });
+
+  await prisma.credentialArtifact.deleteMany({
+    where: {
+      credential: { organization: where }
+    }
+  });
+
+  await prisma.verificationRequest.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.savedOrganization.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.organizationDocument.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.organizationRecipient.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.recipientInvitation.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
   await prisma.shareLink.deleteMany({
     where: {
       credential: {
-        organization: testOrganizationFilter
+        organization: where
       }
     }
   });
 
   await prisma.credential.deleteMany({
     where: {
-      organization: testOrganizationFilter
+      organization: where
     }
   });
 
   await prisma.organizationInvitation.deleteMany({
     where: {
-      organization: testOrganizationFilter
+      organization: where
     }
   });
 
   await prisma.auditLog.deleteMany({
     where: {
-      organization: testOrganizationFilter
+      organization: where
     }
   });
 
   await prisma.organizationMember.deleteMany({
     where: {
-      organization: testOrganizationFilter
+      organization: where
     }
   });
 
   await prisma.organization.deleteMany({
-    where: testOrganizationFilter
+    where
+  });
+}
+
+export async function cleanupTestOrganizations() {
+  await cleanupOrganizationsMatching(organizationCleanupFilter);
+
+  // Registration tests can leave orphan PENDING orgs after their users are deleted
+  // (members cascade away; contactEmail may not use @example.test).
+  await cleanupOrganizationsMatching({
+    OR: [{ members: { none: {} } }]
   });
 }
 
@@ -202,6 +370,37 @@ export async function cleanupTestUsers() {
 }
 
 export async function cleanupTestData() {
+  clearMemoryStorage();
+
+  // Public verify NOT_FOUND events / standalone fraud alerts have no user/org FKs.
+  await prisma.fraudAlert.deleteMany({
+    where: {
+      OR: [
+        {
+          verificationEvent: {
+            verifierId: null,
+            credentialId: null,
+            organizationId: null,
+            shareLinkId: null
+          }
+        },
+        {
+          actorId: null,
+          credentialId: null,
+          verificationEventId: null
+        }
+      ]
+    }
+  });
+  await prisma.verificationEvent.deleteMany({
+    where: {
+      verifierId: null,
+      credentialId: null,
+      organizationId: null,
+      shareLinkId: null
+    }
+  });
+
   await cleanupTestOrganizations();
   await cleanupTestUsers();
 }
