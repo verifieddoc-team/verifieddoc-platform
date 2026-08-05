@@ -1,19 +1,21 @@
 // src/services/dashboardService.js
 //
-// There is no dashboard endpoint on the backend yet, so this is a stub.
-// It resolves with an "empty" shape so the UI renders its empty states
-// correctly. Swap the body of this function for a real request (following
-// whatever API-client pattern the rest of the app already uses, e.g. the
-// same axios/fetch wrapper used in the auth screens) once the endpoint
-// exists. Do not change the return shape without updating
-// useDashboardData.js and the dashboard screen that consumes it.
+// This screen is the issuing-organization portal dashboard (not the holder wallet).
+// There is still no organization dashboard aggregate endpoint on the backend.
+// Canonical related endpoints that DO exist:
+//   GET /organizations
+//   GET /organizations/:organizationId/credentials
+//   GET /organizations/:organizationId/members
+// Holder wallet stats use a different canonical route:
+//   GET /holder/dashboard  (Bearer + HOLDER) via mobileApi.getHolderDashboard
+//
+// Do not call /organizations/me/dashboard — that path is not registered.
+// Do not invent pendingVerification = 0 / recipients = 0 to fake a complete API.
+// Keep the null/empty return shape until a real org-dashboard endpoint exists.
 
 export async function fetchDashboardData() {
-  // TODO(backend): replace with a real request once the dashboard API
-  // is available, e.g.:
-  //   const res = await apiClient.get("/organizations/me/dashboard");
-  //   return res.data;
-
+  // DATABASE_MODEL_MISSING / BACKEND_ENDPOINT_MISSING:
+  // organization portal aggregates (active recipients, pending verification requests).
   return {
     organization: null, // -> { name: string }
     stats: {
