@@ -15,6 +15,10 @@ const testUserEmailFilter = {
   endsWith: `@${TEST_EMAIL_DOMAIN}`
 };
 
+const testUserRelationFilter = {
+  email: testUserEmailFilter
+};
+
 const testOrganizationFilter = {
   slug: {
     startsWith: TEST_ORG_SLUG_PREFIX
@@ -102,6 +106,53 @@ export async function createTestUser(
   };
 }
 
+async function cleanupTestUserDependencies() {
+  await prisma.shareLink.deleteMany({
+    where: {
+      OR: [
+        { createdBy: testUserRelationFilter },
+        { revokedBy: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } },
+        { credential: { revokedBy: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.credential.deleteMany({
+    where: {
+      OR: [
+        { holder: testUserRelationFilter },
+        { issuedBy: testUserRelationFilter },
+        { revokedBy: testUserRelationFilter }
+      ]
+    }
+  });
+
+  await prisma.organizationInvitation.deleteMany({
+    where: {
+      OR: [
+        { email: testUserEmailFilter },
+        { invitedBy: testUserRelationFilter },
+        { acceptedBy: testUserRelationFilter },
+        { revokedBy: testUserRelationFilter }
+      ]
+    }
+  });
+
+  await prisma.auditLog.deleteMany({
+    where: {
+      actor: testUserRelationFilter
+    }
+  });
+
+  await prisma.organizationMember.deleteMany({
+    where: {
+      user: testUserRelationFilter
+    }
+  });
+}
+
 export async function cleanupTestOrganizations() {
   await prisma.shareLink.deleteMany({
     where: {
@@ -123,6 +174,12 @@ export async function cleanupTestOrganizations() {
     }
   });
 
+  await prisma.auditLog.deleteMany({
+    where: {
+      organization: testOrganizationFilter
+    }
+  });
+
   await prisma.organizationMember.deleteMany({
     where: {
       organization: testOrganizationFilter
@@ -135,24 +192,7 @@ export async function cleanupTestOrganizations() {
 }
 
 export async function cleanupTestUsers() {
-  await prisma.auditLog.deleteMany({
-    where: {
-      actor: {
-        email: testUserEmailFilter
-      }
-    }
-  });
-
-  await prisma.organizationInvitation.deleteMany({
-    where: {
-      OR: [
-        { email: testUserEmailFilter },
-        { invitedBy: { email: testUserEmailFilter } },
-        { acceptedBy: { email: testUserEmailFilter } },
-        { revokedBy: { email: testUserEmailFilter } }
-      ]
-    }
-  });
+  await cleanupTestUserDependencies();
 
   await prisma.user.deleteMany({
     where: {
