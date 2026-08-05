@@ -53,9 +53,12 @@ export async function updateOrganizationMemberRole(
           select: {
             id: true,
             email: true,
+            fullName: true,
             firstName: true,
             lastName: true,
+            phone: true,
             role: true,
+            status: true,
             createdAt: true,
             updatedAt: true
           }
@@ -138,9 +141,12 @@ export async function updateOrganizationMemberRole(
             select: {
               id: true,
               email: true,
+              fullName: true,
               firstName: true,
               lastName: true,
+              phone: true,
               role: true,
+              status: true,
               createdAt: true,
               updatedAt: true
             }

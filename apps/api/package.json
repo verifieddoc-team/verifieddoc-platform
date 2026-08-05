@@ -26,6 +26,7 @@
     "express-rate-limit": "^8.0.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "libphonenumber-js": "^1.13.10",
     "pino": "^9.7.0",
     "pino-http": "^10.4.0",
     "swagger-ui-express": "^5.0.1",

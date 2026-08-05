@@ -119,7 +119,23 @@ export function createEnvSchema() {
       JWT_ACCESS_SECRET: z.string().min(32).default(DEFAULT_ACCESS_SECRET),
       JWT_REFRESH_SECRET: z.string().min(32).default(DEFAULT_REFRESH_SECRET),
       CORS_ORIGINS: z.string().default(DEFAULT_CORS_ORIGINS),
-      PUBLIC_WEB_URL: z.string().default(DEFAULT_PUBLIC_WEB_URL)
+      PUBLIC_WEB_URL: z.string().default(DEFAULT_PUBLIC_WEB_URL),
+      TERMS_VERSION: z.string().min(1).default("1.0"),
+      PRIVACY_VERSION: z.string().min(1).default("1.0"),
+      PASSWORD_RESET_ENABLED: z
+        .enum(["true", "false"])
+        .default("true")
+        .transform((value) => value === "true"),
+      PASSWORD_RESET_SECRET: z.string().min(32).default(DEFAULT_ACCESS_SECRET),
+      RESEND_API_KEY: z.string().optional(),
+      MAIL_FROM: z.string().email().optional(),
+      DOCUMENT_UPLOADS_ENABLED: z
+        .enum(["true", "false"])
+        .default("false")
+        .transform((value) => value === "true"),
+      SUPABASE_URL: z.string().url().optional(),
+      SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+      SUPABASE_STORAGE_BUCKET: z.string().optional()
     })
     .superRefine((value, context) => {
       validatePublicWebUrl(value.PUBLIC_WEB_URL, context);
@@ -165,6 +181,18 @@ export function createEnvSchema() {
           code: z.ZodIssueCode.custom,
           message: "Production requires explicit JWT_ACCESS_SECRET and JWT_REFRESH_SECRET values",
           path: ["JWT_ACCESS_SECRET"]
+        });
+      }
+
+      if (
+        value.PASSWORD_RESET_ENABLED &&
+        value.PASSWORD_RESET_SECRET === DEFAULT_ACCESS_SECRET
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Production requires an explicit PASSWORD_RESET_SECRET when password reset is enabled",
+          path: ["PASSWORD_RESET_SECRET"]
         });
       }
 
