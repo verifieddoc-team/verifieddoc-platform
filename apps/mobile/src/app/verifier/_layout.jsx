@@ -19,6 +19,7 @@ export default function VerifierLayout() {
       <Tabs.Screen name="verify" options={{ title: "Verify" }} />
       <Tabs.Screen name="history" options={{ title: "History" }} />
       <Tabs.Screen name="more" options={{ title: "More" }} />
+      <Tabs.Screen name="verification-result" options={{ href: null }} />
     </Tabs>
   );
 }

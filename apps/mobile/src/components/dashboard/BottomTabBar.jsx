@@ -23,6 +23,7 @@ const DEFAULT_TABS_CONFIG = {
  *                    Defaults to the Organisation dashboard's tabs if omitted.
  */
 export default function BottomTabBar({ state, navigation, tabsConfig = DEFAULT_TABS_CONFIG }) {
+  console.log("Routes:", state.routes.map((route) => route.name));
   const insets = useSafeAreaInsets();
 
   return (
