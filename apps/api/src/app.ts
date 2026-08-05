@@ -10,6 +10,7 @@ import { adminAuditRouter } from "./modules/audit/admin-audit.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { credentialRouter } from "./modules/credentials/credential.routes.js";
 import { readyHandler } from "./modules/health/ready.js";
+import { holderDashboardRouter } from "./modules/holder-dashboard/holder-dashboard.routes.js";
 import { adminOrganizationRouter, organizationRouter } from "./modules/organizations/organization.routes.js";
 import { invitationAcceptRouter } from "./modules/invitations/invitation.routes.js";
 import { shareLinkRouter, verifyRouter } from "./modules/share-links/share-link.routes.js";
@@ -33,6 +34,7 @@ export function createApp(options: CreateAppOptions = {}) {
   });
   app.get("/api/v1/ready", readyHandler);
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/holder", holderDashboardRouter);
   app.use("/api/v1/credentials", credentialRouter);
   app.use("/api/v1/credentials/:credentialId/share-links", shareLinkRouter);
   app.use("/api/v1/verify", verifyRouter);

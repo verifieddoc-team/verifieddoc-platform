@@ -375,6 +375,43 @@ export const openApiDocument = {
           pagination: { $ref: "#/components/schemas/PaginationMetadata" }
         }
       },
+      HolderDashboardHolder: {
+        type: "object",
+        required: ["id", "email", "firstName", "lastName", "role"],
+        properties: {
+          id: { type: "string" },
+          email: { type: "string", format: "email" },
+          firstName: { type: "string" },
+          lastName: { type: "string" },
+          role: { type: "string", enum: ["HOLDER"] }
+        },
+        additionalProperties: false
+      },
+      HolderDashboardStats: {
+        type: "object",
+        required: ["total", "active", "expired", "revoked"],
+        properties: {
+          total: { type: "integer", minimum: 0 },
+          active: { type: "integer", minimum: 0 },
+          expired: { type: "integer", minimum: 0 },
+          revoked: { type: "integer", minimum: 0 }
+        },
+        additionalProperties: false
+      },
+      HolderDashboardResponse: {
+        type: "object",
+        required: ["holder", "stats", "recentCredentials"],
+        properties: {
+          holder: { $ref: "#/components/schemas/HolderDashboardHolder" },
+          stats: { $ref: "#/components/schemas/HolderDashboardStats" },
+          recentCredentials: {
+            type: "array",
+            maxItems: 5,
+            items: { $ref: "#/components/schemas/HolderCredentialSummary" }
+          }
+        },
+        additionalProperties: false
+      },
       CredentialDetailResponse: {
         type: "object",
         required: ["credential"],
@@ -1430,6 +1467,41 @@ export const openApiDocument = {
           },
           "409": {
             description: "Organization has already been reviewed",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/holder/dashboard": {
+      get: {
+        summary: "Get the authenticated holder dashboard",
+        tags: ["Holder Dashboard"],
+        security: [{ bearerAuth: [] }],
+        description:
+          "Requires platform role HOLDER. Returns dashboard statistics and the five most recent credentials for the authenticated holder only. Holder identity is taken from the access token; a holder ID must never be supplied by the client. Effective status rules apply: ACTIVE credentials past expiresAt are counted as EXPIRED.",
+        responses: {
+          "200": {
+            description: "Holder dashboard summary",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HolderDashboardResponse" }
+              }
+            }
+          },
+          "401": {
+            description: "Authentication required",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "403": {
+            description: "Authenticated user is not a HOLDER",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" }
