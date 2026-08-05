@@ -136,6 +136,26 @@ npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
 - Swagger UI: `http://localhost:4000/docs`
 - OpenAPI JSON: `http://localhost:4000/openapi.json`
 
+## Live staging deployment
+
+Railway hosts the current staging API. Deployment ownership sits with the Backend
+Engineering Lead. Full Railway settings and ownership notes are in
+[docs/RAILWAY-DEPLOYMENT.md](docs/RAILWAY-DEPLOYMENT.md).
+
+| Item | Value |
+| --- | --- |
+| Hosting provider | Railway |
+| Environment | Staging |
+| Deployment owner | Backend Engineering Lead |
+| API base | `https://verifieddoc-platform-production.up.railway.app/api/v1` |
+| Health | `https://verifieddoc-platform-production.up.railway.app/api/v1/health` |
+| Readiness | `https://verifieddoc-platform-production.up.railway.app/api/v1/ready` |
+| Swagger | `https://verifieddoc-platform-production.up.railway.app/docs` |
+| OpenAPI | `https://verifieddoc-platform-production.up.railway.app/openapi.json` |
+
+`GET /` returns `NOT_FOUND` intentionally. VerifiedDoc exposes an API surface;
+there is no root webpage route defined on the API service.
+
 ## Platform admin bootstrap
 
 For controlled first-time platform admin creation:
@@ -157,12 +177,20 @@ the final presentation sequence.
 
 The final presentation PRD is [docs/PRD-v2-FINAL.md](docs/PRD-v2-FINAL.md).
 
-## Render deployment
+## Deployment
 
-The repository includes `render.yaml` for a Node API service and a Vite static
-web service. The API build generates Prisma Client, compiles TypeScript, applies
-migrations in the pre-deploy step, starts from `dist/src/server.js`, and uses
-`/api/v1/ready` as its database-aware health check.
+Railway is the currently active staging deployment for the VerifiedDoc API. See
+[Live staging deployment](#live-staging-deployment) and
+[docs/RAILWAY-DEPLOYMENT.md](docs/RAILWAY-DEPLOYMENT.md).
+
+### Optional Render configuration
+
+The repository still includes `render.yaml` as an optional deployment
+configuration for a Node API service and a Vite static web service. It is not
+the active staging host. When used, the API build generates Prisma Client,
+compiles TypeScript, applies migrations in the pre-deploy step, starts from
+`dist/src/server.js`, and uses `/api/v1/ready` as its database-aware health
+check.
 
 Configure these values in Render without committing their values:
 
