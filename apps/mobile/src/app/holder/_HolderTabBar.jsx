@@ -4,10 +4,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS, SPACING } from "../../constants/theme";
 
 const TAB_ICONS = {
-  index: require("../../../assets/images/tabIcons/icons/Vector.png"),
-  creds: require("../../../assets/images/tabIcons/icons/square-check.png"),
-  wallet: require("../../../assets/images/tabIcons/icons/files.png"),
-  profile: require("../../../assets/images/tabIcons/icons/camera.png"),
+  index: require("../../../assets/images/icons/Vector.png"),
+  creds: require("../../../assets/images/icons/square-check.png"),
+  wallet: require("../../../assets/images/icons/files.png"),
+  profile: require("../../../assets/images/icons/camera.png"),
 };
 
 const TAB_LABELS = {
