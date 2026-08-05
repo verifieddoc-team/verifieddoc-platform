@@ -69,6 +69,28 @@ describe("Holder dashboard", () => {
     expectNoSensitiveAuthData(response.body);
   });
 
+  it("exposes the shared HolderDashboardResponse contract field names", async () => {
+    const holder = await registerHolder(app);
+
+    const response = await request(app)
+      .get("/api/v1/holder/dashboard")
+      .set("Authorization", `Bearer ${holder.accessToken}`);
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(response.body).sort()).toEqual([
+      "holder",
+      "recentCredentials",
+      "stats"
+    ]);
+    expect(Object.keys(response.body.stats).sort()).toEqual([
+      "active",
+      "expired",
+      "revoked",
+      "total"
+    ]);
+    expect(response.body.holder.role).toBe("HOLDER");
+  });
+
   it("returns zero counts and an empty recentCredentials array for empty holders", async () => {
     const holder = await registerHolder(app);
 

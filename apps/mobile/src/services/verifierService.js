@@ -1,14 +1,11 @@
-// No verifier dashboard endpoint exists yet, so this is a stub. It
-// resolves with an "empty" shape so the UI renders its loading/empty
-// states correctly. Replace the bodies below with real requests —
-// following whichever API-client pattern the rest of the app already
-// uses (see services/api.js) — once the backend exposes them.
+// Verifier aggregate dashboard and credential-ID search are not registered.
+// Canonical public verification endpoint:
+//   GET /verify/:token  (via mobileApi.verify)
+// Do not call /verifier/me/dashboard or POST /verifier/verify — those paths do not exist.
+// Do not invent successful/failed verification statistics without a VerificationEvent model.
 
 export async function fetchVerifierDashboard() {
-  // TODO(backend): replace with a real request once available, e.g.:
-  //   const res = await apiClient.get("/verifier/me/dashboard");
-  //   return res.data;
-
+  // DATABASE_MODEL_MISSING / BACKEND_ENDPOINT_MISSING
   return {
     stats: {
       total: null, // -> { value: number, description: string }
@@ -19,10 +16,10 @@ export async function fetchVerifierDashboard() {
   };
 }
 
-export async function verifyCredential(credentialId) {
-  // TODO(backend): replace with a real request once available, e.g.:
-  //   const res = await apiClient.post("/verifier/verify", { credentialId });
-  //   return res.data;
-
-  throw new Error("Credential verification is not connected to a backend yet.");
+export async function verifyCredential(token) {
+  // Prefer mobileApi.verify(token) → GET /verify/:token once screens are wired.
+  // Credential-ID search is BACKEND_ENDPOINT_MISSING for the current MVP.
+  throw new Error(
+    "Wire this screen to mobileApi.verify(token) (GET /verify/:token). There is no POST /verifier/verify endpoint.",
+  );
 }
