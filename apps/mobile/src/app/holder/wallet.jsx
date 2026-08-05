@@ -33,7 +33,7 @@ const FEATURED_CRED = {
   issuer: "Juliana Ogi",
   date: "Verified 2 days ago",
   status: "Verified",
-  icon: require("../../../assets/images/tabIcons/icons/square-check.png"),
+  icon: require("../../../assets/images/icons/square-check.png"),
   qr: require("../../../assets/images/icon.png"),
 };
 
@@ -44,7 +44,7 @@ const RECENT_CREDS = [
     issuer: "Juliana Ogi",
     date: "Verified 2 days ago",
     status: "Verified",
-    icon: require("../../../assets/images/tabIcons/icons/square-check.png"),
+    icon: require("../../../assets/images/icons/square-check.png"),
   },
   {
     id: "2",
@@ -52,7 +52,7 @@ const RECENT_CREDS = [
     issuer: "Juliana Ogi",
     date: "Verified 2 days ago",
     status: "Verified",
-    icon: require("../../../assets/images/tabIcons/icons/square-check.png"),
+    icon: require("../../../assets/images/icons/square-check.png"),
   },
   {
     id: "3",
@@ -60,7 +60,7 @@ const RECENT_CREDS = [
     issuer: "Juliana Ogi",
     date: "Pending 2 days ago",
     status: "Pending",
-    icon: require("../../../assets/images/tabIcons/icons/square-check.png"),
+    icon: require("../../../assets/images/icons/square-check.png"),
   },
   {
     id: "4",
@@ -68,7 +68,7 @@ const RECENT_CREDS = [
     issuer: "Juliana Ogi",
     date: "Verified 2 days ago",
     status: "Verified",
-    icon: require("../../../assets/images/tabIcons/icons/square-check.png"),
+    icon: require("../../../assets/images/icons/square-check.png"),
   },
 ];
 

@@ -19,7 +19,7 @@ const CREDENTIALS = [
     issuer: "Juliana Ogi",
     date: "Verified 2 days ago",
     status: "Verified",
-    icon: require("../../../assets/images/tabIcons/icons/square-check.png"),
+    icon: require("../../../assets/images/icons/square-check.png"),
   },
   {
     id: "2",
@@ -27,7 +27,7 @@ const CREDENTIALS = [
     issuer: "Juliana Ogi",
     date: "Verified 5 days ago",
     status: "Verified",
-    icon: require("../../../assets/images/tabIcons/icons/square-check.png"),
+    icon: require("../../../assets/images/icons/square-check.png"),
   },
   {
     id: "3",
@@ -35,7 +35,7 @@ const CREDENTIALS = [
     issuer: "Juliana Ogi",
     date: "Pending 1 day ago",
     status: "Pending",
-    icon: require("../../../assets/images/tabIcons/icons/square-check.png"),
+    icon: require("../../../assets/images/icons/square-check.png"),
   },
 ];
 
