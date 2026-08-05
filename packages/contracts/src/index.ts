@@ -110,6 +110,66 @@ export interface SafeCredential {
   };
 }
 
+/** Wallet list / holder dashboard recent-credential row (not full SafeCredential). */
+export interface HolderCredentialSummary {
+  id: string;
+  publicId: string;
+  title: string;
+  credentialType: string;
+  claims: SafeClaims | null;
+  organization: Pick<CredentialOrganizationSummary, "name" | "slug">;
+  issuedAt: string;
+  expiresAt: string | null;
+  status: CredentialStatus;
+  effectiveStatus: CredentialStatus;
+}
+
+export interface HolderDashboardHolder {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: "HOLDER";
+}
+
+export interface HolderDashboardStats {
+  total: number;
+  active: number;
+  expired: number;
+  revoked: number;
+}
+
+export interface HolderDashboardResponse {
+  holder: HolderDashboardHolder;
+  stats: HolderDashboardStats;
+  recentCredentials: HolderCredentialSummary[];
+}
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role?: "HOLDER" | "VERIFIER";
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface RefreshInput {
+  refreshToken: string;
+}
+
+export interface LogoutInput {
+  refreshToken: string;
+}
+
+export interface AcceptInvitationInput {
+  token: string;
+}
+
 export interface IssueCredentialInput {
   holderEmail: string;
   title: string;
