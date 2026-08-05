@@ -10,6 +10,10 @@ export type PublicOrganization = Pick<
   | "contactEmail"
   | "country"
   | "description"
+  | "industry"
+  | "hrContactName"
+  | "hrContactEmail"
+  | "hrContactPhone"
   | "status"
   | "rejectionReason"
   | "reviewedAt"
@@ -31,6 +35,10 @@ export function toPublicOrganization(organization: Organization): PublicOrganiza
     contactEmail: organization.contactEmail,
     country: organization.country,
     description: organization.description,
+    industry: organization.industry,
+    hrContactName: organization.hrContactName,
+    hrContactEmail: organization.hrContactEmail,
+    hrContactPhone: organization.hrContactPhone,
     status: organization.status,
     rejectionReason: organization.rejectionReason,
     reviewedAt: organization.reviewedAt,

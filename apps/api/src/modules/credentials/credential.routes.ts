@@ -4,14 +4,18 @@ import { requireOrganizationRoles } from "../../middleware/requireOrganizationRo
 import { validateBody, validateQuery } from "../../middleware/validate.js";
 import {
   CREDENTIAL_ISSUER_ROLES,
+  credentialArtifactUploadUrlSchema,
   holderCredentialListQuerySchema,
   issueCredentialSchema,
   organizationCredentialListQuerySchema,
   revokeCredentialSchema
 } from "./credential.schemas.js";
 import {
+  completeCredentialArtifactUploadHandler,
+  createCredentialArtifactUploadUrlHandler,
   getCredentialHandler,
   issueCredentialHandler,
+  listCredentialArtifactsHandler,
   listHolderCredentialsHandler,
   listOrganizationCredentialsHandler,
   revokeCredentialHandler
@@ -24,6 +28,11 @@ credentialRouter.get(
   authenticate,
   validateQuery(holderCredentialListQuerySchema),
   listHolderCredentialsHandler
+);
+credentialRouter.get(
+  "/:credentialId/artifacts",
+  authenticate,
+  listCredentialArtifactsHandler
 );
 credentialRouter.get("/:credentialId", authenticate, getCredentialHandler);
 
@@ -51,4 +60,19 @@ organizationCredentialRouter.patch(
   requireOrganizationRoles(...CREDENTIAL_ISSUER_ROLES),
   validateBody(revokeCredentialSchema),
   revokeCredentialHandler
+);
+
+organizationCredentialRouter.post(
+  "/:credentialId/artifacts/upload-url",
+  authenticate,
+  requireOrganizationRoles(...CREDENTIAL_ISSUER_ROLES),
+  validateBody(credentialArtifactUploadUrlSchema),
+  createCredentialArtifactUploadUrlHandler
+);
+
+organizationCredentialRouter.post(
+  "/:credentialId/artifacts/:artifactId/complete",
+  authenticate,
+  requireOrganizationRoles(...CREDENTIAL_ISSUER_ROLES),
+  completeCredentialArtifactUploadHandler
 );

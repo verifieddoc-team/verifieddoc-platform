@@ -1,5 +1,16 @@
-import { OrganizationStatus } from "@prisma/client";
+import {
+  OrganizationDocumentType,
+  OrganizationStatus,
+  VerificationRequestStatus
+} from "@prisma/client";
 import { z } from "zod";
+
+const REGISTRATION_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+const REGISTRATION_DOCUMENT_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png"
+] as const;
 
 const slugSchema = z
   .string()
@@ -52,6 +63,44 @@ export const createOrganizationSchema = z
 
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 
+export const updateOrganizationSchema = z
+  .object({
+    name: z.string().trim().min(2).max(200).optional(),
+    registrationNumber: z.string().trim().min(1).max(100).nullable().optional(),
+    website: secureWebsiteSchema.nullable().optional(),
+    contactEmail: z
+      .string()
+      .trim()
+      .email()
+      .max(320)
+      .transform((value) => value.toLowerCase())
+      .optional(),
+    country: z.string().trim().min(2).max(100).optional(),
+    description: z.string().trim().min(1).max(2000).nullable().optional(),
+    industry: z.string().trim().min(2).max(100).nullable().optional(),
+    hrContactName: z.string().trim().min(1).max(200).nullable().optional(),
+    hrContactEmail: z
+      .string()
+      .trim()
+      .email()
+      .max(320)
+      .transform((value) => value.toLowerCase())
+      .nullable()
+      .optional(),
+    hrContactPhone: z.string().trim().min(3).max(32).nullable().optional()
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (Object.keys(value).length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one field must be provided"
+      });
+    }
+  });
+
+export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;
+
 export const adminOrganizationListQuerySchema = z.object({
   status: z.nativeEnum(OrganizationStatus).optional().default(OrganizationStatus.PENDING),
   page: z.coerce.number().int().positive().optional().default(1),
@@ -77,3 +126,54 @@ export const reviewOrganizationSchema = z
   });
 
 export type ReviewOrganizationInput = z.infer<typeof reviewOrganizationSchema>;
+
+export const organizationVerificationRequestsQuerySchema = z.object({
+  status: z.nativeEnum(VerificationRequestStatus).optional(),
+  page: z.coerce.number().int().positive().optional().default(1),
+  limit: z.coerce.number().int().positive().max(100).optional().default(20)
+});
+
+export type OrganizationVerificationRequestsQuery = z.infer<
+  typeof organizationVerificationRequestsQuerySchema
+>;
+
+export const reviewVerificationRequestSchema = z
+  .object({
+    decision: z.enum(["APPROVE", "REJECT"]),
+    note: z.string().trim().min(1).max(2000).optional()
+  })
+  .strict();
+
+export type ReviewVerificationRequestInput = z.infer<typeof reviewVerificationRequestSchema>;
+
+export const registrationDocumentUploadUrlSchema = z
+  .object({
+    documentType: z.nativeEnum(OrganizationDocumentType),
+    originalFileName: z.string().trim().min(1).max(255),
+    mimeType: z.enum(REGISTRATION_DOCUMENT_MIME_TYPES),
+    sizeBytes: z.number().int().positive().max(REGISTRATION_DOCUMENT_MAX_BYTES)
+  })
+  .strict();
+
+export type RegistrationDocumentUploadUrlInput = z.infer<typeof registrationDocumentUploadUrlSchema>;
+
+export const reviewRegistrationDocumentSchema = z
+  .object({
+    decision: z.enum(["VERIFY", "REJECT"]),
+    rejectionReason: z.string().trim().min(1).max(1000).optional()
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.decision === "REJECT" && !value.rejectionReason) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "rejectionReason is required when decision is REJECT",
+        path: ["rejectionReason"]
+      });
+    }
+  });
+
+export type ReviewRegistrationDocumentInput = z.infer<typeof reviewRegistrationDocumentSchema>;
+
+export const REGISTRATION_DOCUMENT_ALLOWED_MIME_TYPES = REGISTRATION_DOCUMENT_MIME_TYPES;
+export const REGISTRATION_DOCUMENT_MAX_SIZE_BYTES = REGISTRATION_DOCUMENT_MAX_BYTES;
