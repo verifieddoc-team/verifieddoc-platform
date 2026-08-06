@@ -1,5 +1,7 @@
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/errors.js";
+import { logger } from "../../lib/logger.js";
+import { readSanitizedUpstreamError } from "../../lib/provider-errors.js";
 import type {
   CreateSignedDownloadUrlParams,
   CreateSignedDownloadUrlResult,
@@ -7,14 +9,11 @@ import type {
   CreateSignedUploadUrlResult,
   StorageService
 } from "./types.js";
+import { SUPABASE_SIGNED_UPLOAD_TTL_SECONDS } from "./types.js";
 
 function requireSupabaseConfig() {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY || !env.SUPABASE_STORAGE_BUCKET) {
-    throw new AppError(
-      503,
-      "SERVICE_UNAVAILABLE",
-      "Document storage is not configured"
-    );
+    throw new AppError(503, "SERVICE_UNAVAILABLE", "Document storage is not configured");
   }
 
   return {
@@ -24,54 +23,143 @@ function requireSupabaseConfig() {
   };
 }
 
-function objectUrl(baseUrl: string, bucket: string, path: string): string {
-  const normalized = path.replace(/^\/+/, "");
-  return `${baseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${normalized
+function encodeObjectPath(path: string): string {
+  return path
+    .replace(/^\/+/, "")
     .split("/")
     .map((segment) => encodeURIComponent(segment))
-    .join("/")}`;
+    .join("/");
+}
+
+function objectUrl(baseUrl: string, bucket: string, path: string): string {
+  return `${baseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeObjectPath(path)}`;
+}
+
+function authHeaders(serviceRoleKey: string, extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    Authorization: `Bearer ${serviceRoleKey}`,
+    apikey: serviceRoleKey,
+    ...extra
+  };
+}
+
+/**
+ * Resolve a Supabase Storage URL that may be absolute or relative.
+ * Relative paths are joined under `{baseUrl}/storage/v1`.
+ */
+export function resolveSupabaseStorageUrl(baseUrl: string, maybeRelative: string): URL {
+  const trimmed = maybeRelative.trim();
+  if (!trimmed) {
+    throw new AppError(503, "SERVICE_UNAVAILABLE", "Invalid signed upload response");
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return new URL(trimmed);
+  }
+
+  const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  if (path.startsWith("/storage/v1/") || path === "/storage/v1") {
+    return new URL(`${baseUrl}${path}`);
+  }
+
+  return new URL(`${baseUrl}/storage/v1${path}`);
+}
+
+export function extractSignedUploadToken(uploadUrl: URL): string {
+  const token = uploadUrl.searchParams.get("token");
+  if (!token) {
+    throw new AppError(503, "SERVICE_UNAVAILABLE", "Invalid signed upload response");
+  }
+  return token;
+}
+
+async function logStorageFailure(
+  operation: string,
+  response: Response,
+  bucket: string
+): Promise<void> {
+  const upstream = await readSanitizedUpstreamError(response);
+  logger.error(
+    {
+      provider: "supabase-storage",
+      operation,
+      status: response.status,
+      upstreamCode: upstream.code,
+      upstreamMessage: upstream.message,
+      bucket
+    },
+    "supabase-storage provider request failed"
+  );
 }
 
 export class SupabaseStorageAdapter implements StorageService {
   async createSignedUploadUrl(params: CreateSignedUploadUrlParams): Promise<CreateSignedUploadUrlResult> {
     const { baseUrl, serviceRoleKey, bucket } = requireSupabaseConfig();
     const path = params.path.replace(/^\/+/, "");
-    const expiresInSeconds = params.expiresInSeconds ?? 900;
+
+    const headers = authHeaders(serviceRoleKey, {
+      "Content-Type": "application/json"
+    });
+    // Official Supabase signed-upload signing uses x-upsert only when upsert is enabled.
+    if (params.upsert === true) {
+      headers["x-upsert"] = "true";
+    }
 
     const response = await fetch(
-      `${baseUrl}/storage/v1/object/upload/sign/${encodeURIComponent(bucket)}/${path
-        .split("/")
-        .map((segment) => encodeURIComponent(segment))
-        .join("/")}`,
+      `${baseUrl}/storage/v1/object/upload/sign/${encodeURIComponent(bucket)}/${encodeObjectPath(path)}`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${serviceRoleKey}`,
-          apikey: serviceRoleKey,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ expiresIn: expiresInSeconds })
+        headers,
+        // Provider does not accept expiresIn for signed uploads; body must be {}.
+        body: "{}"
       }
     );
 
     if (!response.ok) {
+      await logStorageFailure("createSignedUploadUrl", response, bucket);
       throw new AppError(503, "SERVICE_UNAVAILABLE", "Unable to create signed upload URL");
     }
 
-    const payload = (await response.json()) as { url?: string; token?: string };
-    if (!payload.url || !payload.token) {
-      throw new AppError(503, "SERVICE_UNAVAILABLE", "Invalid signed upload response");
+    let payload: { url?: unknown };
+    try {
+      payload = (await response.json()) as { url?: unknown };
+    } catch {
+      logger.error(
+        {
+          provider: "supabase-storage",
+          operation: "createSignedUploadUrl",
+          status: response.status,
+          upstreamMessage: "invalid JSON response",
+          bucket
+        },
+        "supabase-storage provider request failed"
+      );
+      throw new AppError(503, "SERVICE_UNAVAILABLE", "Unable to create signed upload URL");
     }
 
-    const uploadUrl = payload.url.startsWith("http")
-      ? payload.url
-      : `${baseUrl}/storage/v1${payload.url.startsWith("/") ? "" : "/"}${payload.url}`;
+    if (typeof payload.url !== "string" || !payload.url.trim()) {
+      logger.error(
+        {
+          provider: "supabase-storage",
+          operation: "createSignedUploadUrl",
+          status: response.status,
+          upstreamMessage: "missing url field",
+          bucket
+        },
+        "supabase-storage provider request failed"
+      );
+      throw new AppError(503, "SERVICE_UNAVAILABLE", "Unable to create signed upload URL");
+    }
+
+    const uploadUrl = resolveSupabaseStorageUrl(baseUrl, payload.url);
+    const token = extractSignedUploadToken(uploadUrl);
 
     return {
       path,
-      uploadUrl,
-      token: payload.token,
-      expiresAt: new Date(Date.now() + expiresInSeconds * 1000)
+      uploadUrl: uploadUrl.toString(),
+      token,
+      // Provider-fixed TTL (2 hours). Do not invent a shorter configurable expiry.
+      expiresAt: new Date(Date.now() + SUPABASE_SIGNED_UPLOAD_TTL_SECONDS * 1000)
     };
   }
 
@@ -83,22 +171,16 @@ export class SupabaseStorageAdapter implements StorageService {
     const expiresInSeconds = params.expiresInSeconds ?? 900;
 
     const response = await fetch(
-      `${baseUrl}/storage/v1/object/sign/${encodeURIComponent(bucket)}/${path
-        .split("/")
-        .map((segment) => encodeURIComponent(segment))
-        .join("/")}`,
+      `${baseUrl}/storage/v1/object/sign/${encodeURIComponent(bucket)}/${encodeObjectPath(path)}`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${serviceRoleKey}`,
-          apikey: serviceRoleKey,
-          "Content-Type": "application/json"
-        },
+        headers: authHeaders(serviceRoleKey, { "Content-Type": "application/json" }),
         body: JSON.stringify({ expiresIn: expiresInSeconds })
       }
     );
 
     if (!response.ok) {
+      await logStorageFailure("createSignedDownloadUrl", response, bucket);
       throw new AppError(503, "SERVICE_UNAVAILABLE", "Unable to create signed download URL");
     }
 
@@ -108,9 +190,7 @@ export class SupabaseStorageAdapter implements StorageService {
       throw new AppError(503, "SERVICE_UNAVAILABLE", "Invalid signed download response");
     }
 
-    const downloadUrl = signedPath.startsWith("http")
-      ? signedPath
-      : `${baseUrl}/storage/v1${signedPath.startsWith("/") ? "" : "/"}${signedPath}`;
+    const downloadUrl = resolveSupabaseStorageUrl(baseUrl, signedPath).toString();
 
     return {
       downloadUrl,
@@ -122,10 +202,7 @@ export class SupabaseStorageAdapter implements StorageService {
     const { baseUrl, serviceRoleKey, bucket } = requireSupabaseConfig();
     const response = await fetch(objectUrl(baseUrl, bucket, path), {
       method: "HEAD",
-      headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
-        apikey: serviceRoleKey
-      }
+      headers: authHeaders(serviceRoleKey)
     });
 
     if (response.status === 404) {
@@ -133,6 +210,7 @@ export class SupabaseStorageAdapter implements StorageService {
     }
 
     if (!response.ok) {
+      await logStorageFailure("objectExists", response, bucket);
       throw new AppError(503, "SERVICE_UNAVAILABLE", "Unable to check object existence");
     }
 
@@ -143,10 +221,7 @@ export class SupabaseStorageAdapter implements StorageService {
     const { baseUrl, serviceRoleKey, bucket } = requireSupabaseConfig();
     const response = await fetch(objectUrl(baseUrl, bucket, path), {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
-        apikey: serviceRoleKey
-      }
+      headers: authHeaders(serviceRoleKey)
     });
 
     if (response.status === 404) {
@@ -154,6 +229,7 @@ export class SupabaseStorageAdapter implements StorageService {
     }
 
     if (!response.ok) {
+      await logStorageFailure("getObject", response, bucket);
       throw new AppError(503, "SERVICE_UNAVAILABLE", "Unable to download object");
     }
 
@@ -167,17 +243,35 @@ export class SupabaseStorageAdapter implements StorageService {
 
     const response = await fetch(`${baseUrl}/storage/v1/object/${encodeURIComponent(bucket)}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
-        apikey: serviceRoleKey,
-        "Content-Type": "application/json"
-      },
+      headers: authHeaders(serviceRoleKey, { "Content-Type": "application/json" }),
       body: JSON.stringify({ prefixes: [normalized] })
     });
 
     if (!response.ok && response.status !== 404) {
+      await logStorageFailure("deleteObject", response, bucket);
       throw new AppError(503, "SERVICE_UNAVAILABLE", "Unable to delete object");
     }
+  }
+
+  /** Diagnostic helper: GET bucket metadata without logging secrets. */
+  async getBucketMetadata(): Promise<{ status: number; ok: boolean; upstreamCode?: string; upstreamMessage?: string }> {
+    const { baseUrl, serviceRoleKey, bucket } = requireSupabaseConfig();
+    const response = await fetch(`${baseUrl}/storage/v1/bucket/${encodeURIComponent(bucket)}`, {
+      method: "GET",
+      headers: authHeaders(serviceRoleKey)
+    });
+
+    if (response.ok) {
+      return { status: response.status, ok: true };
+    }
+
+    const upstream = await readSanitizedUpstreamError(response);
+    return {
+      status: response.status,
+      ok: false,
+      upstreamCode: upstream.code,
+      upstreamMessage: upstream.message
+    };
   }
 }
 
@@ -192,4 +286,9 @@ export function getSupabaseStorageAdapter(): SupabaseStorageAdapter {
 
 export function isSupabaseStorageConfigured(): boolean {
   return Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.SUPABASE_STORAGE_BUCKET);
+}
+
+/** Test helper: reset the adapter singleton between cases. */
+export function resetSupabaseStorageAdapterForTests() {
+  singleton = undefined;
 }
