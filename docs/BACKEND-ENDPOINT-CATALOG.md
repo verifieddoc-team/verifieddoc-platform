@@ -6,8 +6,11 @@ All paths are relative to `/api/v1`. Types refer to `@verifieddoc/contracts` unl
 | --- | --- | --- | --- | --- | --- |
 | System | GET | /health | Public | — | ServiceHealth |
 | System | GET | /ready | Public | — | ServiceReadiness |
-| Authentication | POST | /auth/register | Public (rate-limited) | RegisterInput | AuthSession 201 |
-| Authentication | POST | /auth/login | Public (rate-limited) | LoginInput | AuthSession |
+| Authentication | POST | /auth/register | Public (rate-limited) | RegisterInput | PendingEmailVerificationRegistrationResponse 201 (or AuthSession if verification disabled) |
+| Authentication | POST | /auth/email-verification/verify | Public (rate-limited) | VerifyEmailInput | AuthSession |
+| Authentication | POST | /auth/email-verification/resend | Public (rate-limited) | ResendEmailVerificationInput | ResendEmailVerificationResponse 202 |
+| Metadata | GET | /meta/industries | Public | — | IndustryListResponse |
+| Authentication | POST | /auth/login | Public (rate-limited) | LoginInput | AuthSession (403 EMAIL_NOT_VERIFIED if unverified) |
 | Authentication | POST | /auth/refresh | Public (rate-limited) | RefreshInput | AuthSession |
 | Authentication | POST | /auth/logout | Public | LogoutInput | 204 |
 | Authentication | GET | /auth/me | Bearer (any) | — | { user: PublicUser } |

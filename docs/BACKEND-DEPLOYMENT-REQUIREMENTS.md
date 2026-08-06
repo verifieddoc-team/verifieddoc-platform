@@ -26,9 +26,24 @@ Environment variables and operational notes for staging/production. **Do not pla
 | Variable | Purpose |
 | --- | --- |
 | `PASSWORD_RESET_ENABLED` | `true` \| `false` — when false, reset endpoints return opaque/unavailable responses |
-| `PASSWORD_RESET_SECRET` | Secret material for reset challenge hashing (≥32 chars) |
+| `PASSWORD_RESET_SECRET` | Secret material for reset challenge hashing (≥32 chars; must be distinct from JWT and email-verification secrets) |
 
 Password reset email delivery also requires Resend configuration below.
+
+## Signup email verification
+
+| Variable | Purpose |
+| --- | --- |
+| `EMAIL_VERIFICATION_ENABLED` | `true` \| `false` — default `true`; when enabled, public registration does not issue tokens until OTP verify |
+| `EMAIL_VERIFICATION_SECRET` | HMAC secret for signup OTP hashes (≥32 chars; **must not** equal `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, or `PASSWORD_RESET_SECRET`) |
+| `EMAIL_VERIFICATION_OTP_TTL_SECONDS` | OTP lifetime (default `600`) |
+| `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS` | Resend cooldown (default `60`) |
+| `EMAIL_VERIFICATION_MAX_ATTEMPTS` | Max invalid OTP attempts per challenge (default `5`) |
+
+Signup verification uses a separate `EmailVerificationChallenge` table from password-reset OTPs.
+Existing users are backfilled as verified by migration; new registrations leave `emailVerifiedAt` null until verify succeeds.
+
+When verification is enabled in production without Resend + `MAIL_FROM`, registration/resend fail safely with `503 SERVICE_UNAVAILABLE` (no authenticated session).
 
 ## Email (Resend)
 
@@ -37,7 +52,7 @@ Password reset email delivery also requires Resend configuration below.
 | `RESEND_API_KEY` | Resend API key (required for real OTP / transactional email in production) |
 | `MAIL_FROM` | From address (valid email) used by the Resend adapter |
 
-Without Resend + `MAIL_FROM`, password-reset OTP delivery is unavailable in environments that expect real mail. Tests use an in-memory email adapter.
+Without Resend + `MAIL_FROM`, password-reset and signup-verification OTP delivery is unavailable in environments that expect real mail. Tests use an in-memory email adapter. Never log OTP values in production adapters.
 
 ## Document / artifact uploads (Supabase)
 
@@ -62,10 +77,11 @@ Read from process env in fraud-alert helpers; not part of the Zod env schema def
 
 | Feature area | External dependency |
 | --- | --- |
+| Signup email verification OTP | Resend (`RESEND_API_KEY` + `MAIL_FROM`) when `EMAIL_VERIFICATION_ENABLED=true` |
 | Password reset OTP email | Resend (`RESEND_API_KEY` + `MAIL_FROM`) |
 | Personal documents, registration documents, credential artifacts, file-hash verification uploads | Supabase storage (`SUPABASE_*` + `DOCUMENT_UPLOADS_ENABLED=true`) |
 
-Resend + Supabase are required for **full** production feature coverage. Core auth, credentials, share links, verification events, admin aggregates, and notifications function without them when those upload/email paths are disabled or stubbed.
+Resend + Supabase are required for **full** production feature coverage. Core auth (after verification), credentials, share links, verification events, admin aggregates, and notifications function without uploads when those paths are disabled or stubbed.
 
 ## Database migrations
 
@@ -75,9 +91,9 @@ Resend + Supabase are required for **full** production feature coverage. Core au
 
 ## Operational checklist
 
-1. Set explicit production secrets for JWT, database, CORS, `PUBLIC_WEB_URL`, and `PASSWORD_RESET_SECRET` (required in production when reset is enabled).
-2. Apply migrations with `prisma migrate deploy`.
-3. Configure Resend for password reset.
+1. Set explicit production secrets for JWT, database, CORS, `PUBLIC_WEB_URL`, `PASSWORD_RESET_SECRET` (when reset is enabled), and `EMAIL_VERIFICATION_SECRET` (when verification is enabled). Keep those secrets distinct.
+2. Apply migrations with `prisma migrate deploy` (includes signup email-verification backfill).
+3. Configure Resend for signup verification and password reset.
 4. Configure Supabase storage for document/artifact uploads; keep `DOCUMENT_UPLOADS_ENABLED=false` until storage is ready.
 5. Optionally tune `FRAUD_HIGH_RISK_INVALID_THRESHOLD`.
 6. Verify `/api/v1/health` and `/api/v1/ready` after deploy.
