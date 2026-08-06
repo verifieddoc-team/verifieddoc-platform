@@ -149,6 +149,7 @@ export async function listOrganizationMembers(organizationId: string): Promise<O
           phone: true,
           role: true,
           status: true,
+          emailVerifiedAt: true,
           createdAt: true,
           updatedAt: true
         }

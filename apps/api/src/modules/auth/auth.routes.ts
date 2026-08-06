@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { authenticate } from "../../middleware/authenticate.js";
-import { authRateLimiter, passwordResetRateLimiter } from "../../middleware/rateLimit.js";
+import {
+  authRateLimiter,
+  emailVerificationRateLimiter,
+  passwordResetRateLimiter
+} from "../../middleware/rateLimit.js";
 import { validateBody } from "../../middleware/validate.js";
 import {
   changePasswordHandler,
@@ -12,7 +16,9 @@ import {
   passwordResetVerifyHandler,
   refreshHandler,
   registerHandler,
-  updateProfileHandler
+  resendEmailVerificationHandler,
+  updateProfileHandler,
+  verifyEmailHandler
 } from "./auth.handlers.js";
 import {
   changePasswordSchema,
@@ -23,7 +29,9 @@ import {
   passwordResetVerifySchema,
   refreshSchema,
   registerSchema,
-  updateProfileSchema
+  resendEmailVerificationSchema,
+  updateProfileSchema,
+  verifyEmailSchema
 } from "./auth.schemas.js";
 
 export const authRouter = Router();
@@ -57,4 +65,16 @@ authRouter.post(
   passwordResetRateLimiter,
   validateBody(passwordResetConfirmSchema),
   passwordResetConfirmHandler
+);
+authRouter.post(
+  "/email-verification/verify",
+  emailVerificationRateLimiter,
+  validateBody(verifyEmailSchema),
+  verifyEmailHandler
+);
+authRouter.post(
+  "/email-verification/resend",
+  emailVerificationRateLimiter,
+  validateBody(resendEmailVerificationSchema),
+  resendEmailVerificationHandler
 );

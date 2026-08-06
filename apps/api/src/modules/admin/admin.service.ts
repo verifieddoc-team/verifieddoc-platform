@@ -38,6 +38,7 @@ function toAdminUser(user: {
   phone: string | null;
   role: PlatformRole;
   status: UserStatus;
+  emailVerifiedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   suspendedAt: Date | null;
