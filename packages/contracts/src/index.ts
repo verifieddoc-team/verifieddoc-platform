@@ -236,7 +236,7 @@ export interface HolderDashboardResponse {
   recentActivity?: HolderActivityItem[];
 }
 
-/** @deprecated Prefer PersonalRegistrationInput or OrganizationRegistrationInput */
+/** @deprecated Prefer PersonalRegistrationInput */
 export interface LegacyRegisterInput {
   email: string;
   password: string;
@@ -245,6 +245,7 @@ export interface LegacyRegisterInput {
   role?: "HOLDER" | "VERIFIER";
 }
 
+/** Canonical public registration: HOLDER and VERIFIER use identical personal fields. */
 export interface PersonalRegistrationInput {
   accountType: "HOLDER" | "VERIFIER";
   fullName: string;
@@ -256,30 +257,7 @@ export interface PersonalRegistrationInput {
   role?: "HOLDER" | "VERIFIER";
 }
 
-export interface OrganizationHrContactInput {
-  fullName?: string;
-  email: string;
-  phone?: string;
-}
-
-export interface OrganizationRegistrationInput {
-  accountType: "ORGANIZATION";
-  fullName: string;
-  email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
-  acceptedTerms: true;
-  companyName: string;
-  industry: string;
-  country: string;
-  hrContact: OrganizationHrContactInput | string;
-}
-
-export type RegisterInput =
-  | PersonalRegistrationInput
-  | OrganizationRegistrationInput
-  | LegacyRegisterInput;
+export type RegisterInput = PersonalRegistrationInput | LegacyRegisterInput;
 
 export interface LoginInput {
   email: string;
