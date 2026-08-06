@@ -9,6 +9,7 @@ const publicUserSchema = {
     "phone",
     "role",
     "status",
+    "emailVerifiedAt",
     "createdAt",
     "updatedAt"
   ],
@@ -27,6 +28,12 @@ const publicUserSchema = {
       type: "string",
       enum: ["ACTIVE", "SUSPENDED"]
     },
+    emailVerifiedAt: {
+      type: "string",
+      format: "date-time",
+      nullable: true,
+      description: "ISO timestamp when signup email was verified; null until verification completes"
+    },
     createdAt: { type: "string", format: "date-time" },
     updatedAt: { type: "string", format: "date-time" }
   },
@@ -39,7 +46,7 @@ const organizationRegistrationSummarySchema = {
   properties: {
     id: { type: "string" },
     name: { type: "string", example: "Lumora Solutions" },
-    industry: { type: "string", nullable: true, example: "Technology" },
+    industry: { type: "string", nullable: true, example: "EDUCATION" },
     status: { type: "string", enum: ["PENDING", "VERIFIED", "REJECTED", "SUSPENDED"] },
     membershipRole: { type: "string", enum: ["ORGANIZATION_ADMIN"] }
   },
@@ -54,6 +61,83 @@ const authSessionSchema = {
     accessToken: { type: "string", description: "Short-lived JWT access token (15 minutes)" },
     refreshToken: { type: "string", description: "Opaque refresh token valid for 30 days" },
     organization: organizationRegistrationSummarySchema
+  },
+  additionalProperties: false
+} as const;
+
+const pendingEmailVerificationRegistrationResponseSchema = {
+  type: "object",
+  required: [
+    "verificationRequired",
+    "verificationRequestId",
+    "email",
+    "maskedEmail",
+    "expiresInSeconds",
+    "resendAvailableInSeconds"
+  ],
+  properties: {
+    verificationRequired: { type: "boolean", enum: [true] },
+    verificationRequestId: {
+      type: "string",
+      description: "Opaque signup verification challenge id (not a password-reset requestId)"
+    },
+    email: { type: "string", format: "email" },
+    maskedEmail: { type: "string", example: "j***@example.com" },
+    expiresInSeconds: { type: "integer", example: 600 },
+    resendAvailableInSeconds: { type: "integer", example: 60 }
+  },
+  additionalProperties: false,
+  description:
+    "Returned by POST /auth/register when signup email verification is required. No accessToken, refreshToken, or OTP."
+} as const;
+
+const resendEmailVerificationResponseSchema = {
+  type: "object",
+  required: ["verificationRequestId", "expiresInSeconds", "resendAvailableInSeconds"],
+  properties: {
+    verificationRequestId: {
+      type: "string",
+      description: "Opaque signup verification challenge id (not a password-reset requestId)"
+    },
+    expiresInSeconds: { type: "integer", example: 600 },
+    resendAvailableInSeconds: { type: "integer", example: 60 }
+  },
+  additionalProperties: false
+} as const;
+
+const industryOptionSchema = {
+  type: "object",
+  required: ["code", "label"],
+  properties: {
+    code: {
+      type: "string",
+      enum: [
+        "HR_RECRUITMENT",
+        "BANKING_FINTECH",
+        "EDUCATION",
+        "GOVERNMENT_GOVTECH",
+        "LEGAL_SERVICES",
+        "REAL_ESTATE_PROPTECH",
+        "INSURANCE",
+        "TRANSPORTATION",
+        "PROFESSIONAL_LICENSING",
+        "BACKGROUND_SCREENING"
+      ],
+      example: "EDUCATION"
+    },
+    label: { type: "string", example: "Education" }
+  },
+  additionalProperties: false
+} as const;
+
+const industryListResponseSchema = {
+  type: "object",
+  required: ["industries"],
+  properties: {
+    industries: {
+      type: "array",
+      items: industryOptionSchema
+    }
   },
   additionalProperties: false
 } as const;
@@ -88,12 +172,43 @@ export const openApiDocument = {
         type: "http",
         scheme: "bearer",
         bearerFormat: "JWT",
-        description: "JWT access token obtained from register, login, or refresh"
+        description:
+          "JWT access token obtained from login, refresh, or POST /auth/email-verification/verify when signup verification is enabled (register alone does not issue tokens when verification is required)"
       }
     },
     schemas: {
       PublicUser: publicUserSchema,
       AuthSession: authSessionSchema,
+      PendingEmailVerificationRegistrationResponse: pendingEmailVerificationRegistrationResponseSchema,
+      VerifyEmailRequest: {
+        type: "object",
+        required: ["requestId", "otp"],
+        properties: {
+          requestId: {
+            type: "string",
+            description: "Signup verification challenge id from register or resend (not password-reset requestId)"
+          },
+          otp: {
+            type: "string",
+            pattern: "^\\d{6}$",
+            example: "123456",
+            description: "Six-digit signup verification OTP (separate from password-reset OTP)"
+          }
+        },
+        additionalProperties: false
+      },
+      VerifyEmailResponse: authSessionSchema,
+      ResendEmailVerificationRequest: {
+        type: "object",
+        required: ["email"],
+        properties: {
+          email: { type: "string", format: "email", example: "jane.holder@example.test" }
+        },
+        additionalProperties: false
+      },
+      ResendEmailVerificationResponse: resendEmailVerificationResponseSchema,
+      IndustryOption: industryOptionSchema,
+      IndustryListResponse: industryListResponseSchema,
       OrganizationRegistrationSummary: organizationRegistrationSummarySchema,
       RegisterRequest: {
         oneOf: [
@@ -171,7 +286,12 @@ export const openApiDocument = {
           password: { type: "string", format: "password", example: "SecurePassword1!" },
           confirmPassword: { type: "string", format: "password", example: "SecurePassword1!" },
           companyName: { type: "string", example: "Lumora Solutions" },
-          industry: { type: "string", example: "Technology" },
+          industry: {
+            type: "string",
+            example: "EDUCATION",
+            description:
+              "Prefer a stable industry code from GET /meta/industries (e.g. EDUCATION). Approved codes or exact labels are accepted and normalized to codes when recognized."
+          },
           country: { type: "string", example: "Uganda" },
           hrContact: {
             oneOf: [
@@ -225,7 +345,10 @@ export const openApiDocument = {
         properties: {
           email: { type: "string", format: "email" },
           password: { type: "string", format: "password" }
-        }
+        },
+        additionalProperties: false,
+        description:
+          "Email and password only. Do not send role or other fields — login UI role cards are navigation choices, not authorization proof."
       },
       RefreshRequest: {
         type: "object",
@@ -1956,7 +2079,7 @@ export const openApiDocument = {
         summary: "Register a new account",
         tags: ["Authentication"],
         description:
-          "Supports canonical accountType registration (HOLDER, VERIFIER, ORGANIZATION) and legacy firstName/lastName requests. ORGANIZATION creates a PENDING organization with ORGANIZATION_ADMIN membership; platform role remains HOLDER. JSON property names are case-sensitive; hrContact is canonical.",
+          "Supports canonical accountType registration (HOLDER, VERIFIER, ORGANIZATION) and legacy firstName/lastName requests. ORGANIZATION creates a PENDING organization with ORGANIZATION_ADMIN membership; platform role remains HOLDER. When EMAIL_VERIFICATION_ENABLED, returns PendingEmailVerificationRegistrationResponse (no tokens) until OTP verification succeeds. JSON property names are case-sensitive; hrContact is canonical.",
         requestBody: {
           required: true,
           content: {
@@ -1997,7 +2120,7 @@ export const openApiDocument = {
                     password: "SecurePassword1!",
                     confirmPassword: "SecurePassword1!",
                     companyName: "Lumora Solutions",
-                    industry: "Technology",
+                    industry: "EDUCATION",
                     hrContact: {
                       fullName: "Mary Human",
                       email: "hr@company.com",
@@ -2023,10 +2146,49 @@ export const openApiDocument = {
         },
         responses: {
           "201": {
-            description: "Account created",
+            description:
+              "Account created. Returns AuthSession when verification is disabled or not required; otherwise PendingEmailVerificationRegistrationResponse.",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/AuthSession" }
+                schema: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/AuthSession" },
+                    { $ref: "#/components/schemas/PendingEmailVerificationRegistrationResponse" }
+                  ]
+                },
+                examples: {
+                  session: {
+                    summary: "Immediate session (verification disabled)",
+                    value: {
+                      user: {
+                        id: "clxyz1234567890",
+                        email: "jane.holder@example.test",
+                        fullName: "Jane Holder",
+                        firstName: "Jane",
+                        lastName: "Holder",
+                        phone: "+256700000000",
+                        role: "HOLDER",
+                        status: "ACTIVE",
+                        emailVerifiedAt: "2026-08-06T10:00:00.000Z",
+                        createdAt: "2026-08-06T10:00:00.000Z",
+                        updatedAt: "2026-08-06T10:00:00.000Z"
+                      },
+                      accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                      refreshToken: "opaque-refresh-token"
+                    }
+                  },
+                  pendingVerification: {
+                    summary: "Pending signup email verification",
+                    value: {
+                      verificationRequired: true,
+                      verificationRequestId: "a1b2c3d4e5f6789012345678abcdef01",
+                      email: "jane.holder@example.test",
+                      maskedEmail: "j***@example.test",
+                      expiresInSeconds: 600,
+                      resendAvailableInSeconds: 60
+                    }
+                  }
+                }
               }
             }
           },
@@ -2039,10 +2201,36 @@ export const openApiDocument = {
             }
           },
           "409": {
-            description: "Email already registered",
+            description:
+              "EMAIL_VERIFICATION_REQUIRED when the email belongs to an unverified account (use resend); EMAIL_ALREADY_EXISTS when the email is already verified",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" }
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                examples: {
+                  emailVerificationRequired: {
+                    summary: "Unverified account — use resend",
+                    value: {
+                      error: {
+                        code: "EMAIL_VERIFICATION_REQUIRED",
+                        message: "Email verification is required for this account",
+                        details: {
+                          verificationRequired: true,
+                          email: "jane.holder@example.test",
+                          maskedEmail: "j***@example.test"
+                        }
+                      }
+                    }
+                  },
+                  emailAlreadyExists: {
+                    summary: "Verified account already exists",
+                    value: {
+                      error: {
+                        code: "EMAIL_ALREADY_EXISTS",
+                        message: "An account with this email already exists"
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -2053,6 +2241,25 @@ export const openApiDocument = {
                 schema: { $ref: "#/components/schemas/ErrorResponse" }
               }
             }
+          },
+          "503": {
+            description: "SERVICE_UNAVAILABLE when verification is enabled but email delivery is unavailable",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                examples: {
+                  serviceUnavailable: {
+                    summary: "Email delivery unavailable",
+                    value: {
+                      error: {
+                        code: "SERVICE_UNAVAILABLE",
+                        message: "Email verification is temporarily unavailable"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2061,11 +2268,22 @@ export const openApiDocument = {
       post: {
         summary: "Authenticate with email and password",
         tags: ["Authentication"],
+        description:
+          "Login request body is email and password only. UI role cards (Holder / Verifier / Institution) are navigation choices — do not send role. After login, route using user.role and organization memberships from organization APIs. A Holder with Organization Admin membership has user.role HOLDER; organization workspace access is membership-based (see optional organization on register/verify responses and organization membership endpoints).",
         requestBody: {
           required: true,
           content: {
             "application/json": {
-              schema: { $ref: "#/components/schemas/LoginRequest" }
+              schema: { $ref: "#/components/schemas/LoginRequest" },
+              examples: {
+                holder: {
+                  summary: "Holder login",
+                  value: {
+                    email: "jane.holder@example.test",
+                    password: "SecurePassword1!"
+                  }
+                }
+              }
             }
           }
         },
@@ -2074,7 +2292,98 @@ export const openApiDocument = {
             description: "Authenticated",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/AuthSession" }
+                schema: { $ref: "#/components/schemas/AuthSession" },
+                examples: {
+                  holder: {
+                    summary: "Credential Holder",
+                    value: {
+                      user: {
+                        id: "clholder1234567890",
+                        email: "jane.holder@example.test",
+                        fullName: "Jane Holder",
+                        firstName: "Jane",
+                        lastName: "Holder",
+                        phone: "+256700000000",
+                        role: "HOLDER",
+                        status: "ACTIVE",
+                        emailVerifiedAt: "2026-08-06T10:00:00.000Z",
+                        createdAt: "2026-08-06T09:00:00.000Z",
+                        updatedAt: "2026-08-06T10:00:00.000Z"
+                      },
+                      accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                      refreshToken: "opaque-refresh-token"
+                    }
+                  },
+                  verifier: {
+                    summary: "Verifier",
+                    value: {
+                      user: {
+                        id: "clverifier123456789",
+                        email: "victor.verifier@example.test",
+                        fullName: "Victor Verifier",
+                        firstName: "Victor",
+                        lastName: "Verifier",
+                        phone: "+256700000001",
+                        role: "VERIFIER",
+                        status: "ACTIVE",
+                        emailVerifiedAt: "2026-08-06T10:00:00.000Z",
+                        createdAt: "2026-08-06T09:00:00.000Z",
+                        updatedAt: "2026-08-06T10:00:00.000Z"
+                      },
+                      accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                      refreshToken: "opaque-refresh-token"
+                    }
+                  },
+                  platformAdmin: {
+                    summary: "Platform Admin",
+                    value: {
+                      user: {
+                        id: "cladmin1234567890",
+                        email: "admin@example.test",
+                        fullName: "Demo PlatformAdmin",
+                        firstName: "Demo",
+                        lastName: "PlatformAdmin",
+                        phone: null,
+                        role: "PLATFORM_ADMIN",
+                        status: "ACTIVE",
+                        emailVerifiedAt: "2026-08-06T10:00:00.000Z",
+                        createdAt: "2026-08-06T09:00:00.000Z",
+                        updatedAt: "2026-08-06T10:00:00.000Z"
+                      },
+                      accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                      refreshToken: "opaque-refresh-token"
+                    }
+                  },
+                  holderOrgAdmin: {
+                    summary: "Holder with Organization Admin membership",
+                    description:
+                      "Platform role remains HOLDER; organization admin access is via memberships (optional organization summary may appear on session responses from register/verify).",
+                    value: {
+                      user: {
+                        id: "clorgadmin123456789",
+                        email: "jane@company.com",
+                        fullName: "Jane Smith",
+                        firstName: "Jane",
+                        lastName: "Smith",
+                        phone: "+256700000002",
+                        role: "HOLDER",
+                        status: "ACTIVE",
+                        emailVerifiedAt: "2026-08-06T10:00:00.000Z",
+                        createdAt: "2026-08-06T09:00:00.000Z",
+                        updatedAt: "2026-08-06T10:00:00.000Z"
+                      },
+                      accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                      refreshToken: "opaque-refresh-token",
+                      organization: {
+                        id: "clorg1234567890",
+                        name: "Lumora Solutions",
+                        industry: "EDUCATION",
+                        status: "PENDING",
+                        membershipRole: "ORGANIZATION_ADMIN"
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -2091,6 +2400,30 @@ export const openApiDocument = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "403": {
+            description: "EMAIL_NOT_VERIFIED when credentials are valid but signup email is not verified",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                examples: {
+                  emailNotVerified: {
+                    summary: "Email verification required",
+                    value: {
+                      error: {
+                        code: "EMAIL_NOT_VERIFIED",
+                        message: "Email verification is required",
+                        details: {
+                          verificationRequired: true,
+                          email: "jane.holder@example.test",
+                          maskedEmail: "j***@example.test"
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -2330,6 +2663,133 @@ export const openApiDocument = {
           "204": { description: "Password reset complete" },
           "400": { description: "Invalid or expired reset token", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
           "429": { description: "Rate limit exceeded", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/auth/email-verification/verify": {
+      post: {
+        summary: "Verify signup email with OTP",
+        tags: ["Authentication"],
+        description:
+          "Completes signup email verification (separate from password-reset OTP). Issues AuthSession on success. Use verificationRequestId from register or resend — not password-reset requestId.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/VerifyEmailRequest" },
+              examples: {
+                verify: {
+                  summary: "Verify signup OTP",
+                  value: {
+                    requestId: "a1b2c3d4e5f6789012345678abcdef01",
+                    otp: "123456"
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Email verified — session issued",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/VerifyEmailResponse" }
+              }
+            }
+          },
+          "400": {
+            description: "Validation error, OTP_INVALID, or OTP_EXPIRED",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          },
+          "401": {
+            description: "INVALID_CREDENTIALS when the account is suspended",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          },
+          "429": {
+            description: "OTP_LOCKED or rate limit exceeded",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          },
+          "503": {
+            description: "SERVICE_UNAVAILABLE when signup email verification is disabled or unavailable",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          }
+        }
+      }
+    },
+    "/auth/email-verification/resend": {
+      post: {
+        summary: "Resend signup email verification OTP",
+        tags: ["Authentication"],
+        description:
+          "Public, rate-limited. Resends signup verification OTP (not password-reset). Returns a generic 202 response for unknown, verified, or suspended emails to limit enumeration.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ResendEmailVerificationRequest" },
+              examples: {
+                resend: {
+                  summary: "Resend verification OTP",
+                  value: { email: "jane.holder@example.test" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "202": {
+            description: "Resend accepted (email sent when an unverified account exists and mail is configured)",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ResendEmailVerificationResponse" }
+              }
+            }
+          },
+          "400": {
+            description: "Validation error",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          },
+          "429": {
+            description: "Rate limit exceeded",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          },
+          "503": {
+            description: "SERVICE_UNAVAILABLE when verification is enabled but email delivery is unavailable",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+          }
+        }
+      }
+    },
+    "/meta/industries": {
+      get: {
+        summary: "List canonical organization industry options",
+        tags: ["Meta"],
+        description:
+          "Public catalog of approved industry codes and labels for organization registration. Prefer stable codes (e.g. EDUCATION). No OTHER option.",
+        responses: {
+          "200": {
+            description: "Industry catalog",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/IndustryListResponse" },
+                example: {
+                  industries: [
+                    { code: "HR_RECRUITMENT", label: "HR & Recruitment" },
+                    { code: "BANKING_FINTECH", label: "Banking & FinTech" },
+                    { code: "EDUCATION", label: "Education" },
+                    { code: "GOVERNMENT_GOVTECH", label: "Government / GovTech" },
+                    { code: "LEGAL_SERVICES", label: "Legal Services" },
+                    { code: "REAL_ESTATE_PROPTECH", label: "Real Estate / PropTech" },
+                    { code: "INSURANCE", label: "Insurance" },
+                    { code: "TRANSPORTATION", label: "Transportation" },
+                    { code: "PROFESSIONAL_LICENSING", label: "Professional Licensing" },
+                    { code: "BACKGROUND_SCREENING", label: "Background Screening" }
+                  ]
+                }
+              }
+            }
+          }
         }
       }
     },
