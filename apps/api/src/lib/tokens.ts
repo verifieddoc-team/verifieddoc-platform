@@ -23,6 +23,11 @@ export function hashPasswordResetSecret(value: string): string {
   return createHmac("sha256", env.PASSWORD_RESET_SECRET).update(value).digest("hex");
 }
 
+/** Peppered hash for signup email-verification OTPs (uses EMAIL_VERIFICATION_SECRET). */
+export function hashEmailVerificationSecret(value: string): string {
+  return createHmac("sha256", env.EMAIL_VERIFICATION_SECRET).update(value).digest("hex");
+}
+
 export function safeEqualHex(left: string, right: string): boolean {
   try {
     const leftBuf = Buffer.from(left, "hex");
