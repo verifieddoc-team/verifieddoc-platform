@@ -449,6 +449,27 @@ describe("Credential sharing and public verification", () => {
     expect(notification).not.toBeNull();
   });
 
+  it("performs public share-token verification immediately without Platform Admin approval", async () => {
+    const { holder, credentialId } = await setupHolderCredential(app);
+    const createResponse = await createShareLinkRequest(app, credentialId, holder.accessToken);
+    const rawToken = createResponse.body.token as string;
+
+    const pendingAdminReviews = await prisma.organization.count({
+      where: {
+        status: "PENDING",
+        credentials: { some: { id: credentialId } }
+      }
+    });
+    // Credential issuance already requires a verified issuer org; public verify still
+    // must not wait on a Platform Admin decision for the verification event itself.
+    expect(pendingAdminReviews).toBe(0);
+
+    const verifyResponse = await verifyShareTokenRequest(app, rawToken);
+    expect(verifyResponse.status).toBe(200);
+    expect(verifyResponse.body.result).toBe("VALID");
+    expect(verifyResponse.body.error).toBeUndefined();
+  });
+
   it("records VerificationEvents for unavailable share links before 404", async () => {
     const unknownResponse = await verifyShareTokenRequest(app, `unknown-${randomUUID()}`);
     expect(unknownResponse.status).toBe(404);

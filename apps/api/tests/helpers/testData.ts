@@ -253,7 +253,7 @@ async function cleanupTestUserDependencies() {
 const organizationCleanupFilter = {
   OR: [
     testOrganizationFilter,
-    // Organizations created via ORGANIZATION registration use slugified company names.
+    // Organizations created via older registration flows may use slugified company names.
     { members: { some: { user: testUserRelationFilter } } },
     { contactEmail: testUserEmailFilter }
   ]
