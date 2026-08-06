@@ -263,6 +263,22 @@ describe("Platform operations and audit access", () => {
     ).toThrow(/EMAIL_VERIFICATION_SECRET/i);
   });
 
+  it("accepts plain MAIL_FROM emails and rejects display-name forms", () => {
+    expect(
+      createEnvSchema().parse({
+        ...productionEnvBase,
+        MAIL_FROM: "noreply@example.com"
+      }).MAIL_FROM
+    ).toBe("noreply@example.com");
+
+    expect(() =>
+      createEnvSchema().parse({
+        ...productionEnvBase,
+        MAIL_FROM: "VerifiedDoc <noreply@example.com>"
+      })
+    ).toThrow(/email/i);
+  });
+
   it("rejects default JWT secrets and wildcard CORS in production", () => {
     expect(() =>
       createEnvSchema().parse({

@@ -50,7 +50,7 @@ When verification is enabled in production without Resend + `MAIL_FROM`, registr
 | Variable | Purpose |
 | --- | --- |
 | `RESEND_API_KEY` | Resend API key (required for real OTP / transactional email in production) |
-| `MAIL_FROM` | From address (valid email) used by the Resend adapter |
+| `MAIL_FROM` | Plain email address used by the Resend adapter (e.g. `noreply@example.com`; display-name forms like `VerifiedDoc <noreply@example.com>` are rejected) |
 
 Without Resend + `MAIL_FROM`, password-reset and signup-verification OTP delivery is unavailable in environments that expect real mail. Tests use an in-memory email adapter. Never log OTP values in production adapters.
 

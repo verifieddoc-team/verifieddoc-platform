@@ -173,7 +173,7 @@ Registration uses singular `industry`, not an `industries` array.
 | `EMAIL_VERIFICATION_OTP_TTL_SECONDS` | Default `600` |
 | `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS` | Default `60` |
 | `EMAIL_VERIFICATION_MAX_ATTEMPTS` | Default `5` |
-| `RESEND_API_KEY` + `MAIL_FROM` | Required for real email in production |
+| `RESEND_API_KEY` + `MAIL_FROM` | Required for real email in production (`MAIL_FROM` must be a plain address such as `noreply@example.com`) |
 
 Production fails safely with `503 SERVICE_UNAVAILABLE` when verification is enabled but email delivery is unavailable.
 

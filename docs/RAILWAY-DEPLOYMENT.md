@@ -73,7 +73,7 @@ passwords, database URLs, or tokens to the repository.
 | `EMAIL_VERIFICATION_SECRET` | Distinct ≥32-char secret for signup OTP HMAC (not equal to JWT/password-reset secrets) |
 | `PASSWORD_RESET_SECRET` | Distinct ≥32-char secret for password-reset OTP HMAC |
 | `RESEND_API_KEY` | Required for real signup-verification and password-reset email |
-| `MAIL_FROM` | From address for Resend |
+| `MAIL_FROM` | Plain From email for Resend (e.g. `noreply@example.com`) |
 
 See `docs/BACKEND-DEPLOYMENT-REQUIREMENTS.md` for optional TTL/cooldown vars and full notes.
 
