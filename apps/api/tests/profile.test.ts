@@ -3,6 +3,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
+import { getTestOtpForRequest } from "../src/services/email/index.js";
 import {
   cleanupTestData,
   createRegisterPayload,
@@ -13,6 +14,21 @@ import {
 } from "./helpers/testData.js";
 
 const app = createApp();
+
+async function registerAndVerify(payload: Record<string, unknown>) {
+  const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+  expect(registerResponse.status).toBe(201);
+  if (!registerResponse.body.verificationRequired) {
+    return registerResponse;
+  }
+  const requestId = registerResponse.body.verificationRequestId as string;
+  const otp = getTestOtpForRequest(requestId);
+  const verifyResponse = await request(app)
+    .post("/api/v1/auth/email-verification/verify")
+    .send({ requestId, otp });
+  expect(verifyResponse.status).toBe(200);
+  return verifyResponse;
+}
 
 function uniquePhone() {
   return `+2567${String(Math.floor(Math.random() * 100_000_000)).padStart(8, "0")}`;
@@ -33,7 +49,7 @@ describe("Profile and password change", () => {
 
   it("updates profile fullName and syncs firstName/lastName", async () => {
     const payload = createRegisterPayload({ firstName: "Ada", lastName: "Lovelace" });
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const registerResponse = await registerAndVerify(payload);
 
     const response = await request(app)
       .patch("/api/v1/auth/me")
@@ -60,7 +76,7 @@ describe("Profile and password change", () => {
 
   it("updates profile via firstName+lastName and phone", async () => {
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const registerResponse = await registerAndVerify(payload);
     const phone = uniquePhone();
 
     const response = await request(app)
@@ -91,7 +107,7 @@ describe("Profile and password change", () => {
     });
 
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const registerResponse = await registerAndVerify(payload);
 
     const response = await request(app)
       .patch("/api/v1/auth/me")
@@ -104,7 +120,7 @@ describe("Profile and password change", () => {
 
   it("changes password, revokes refresh tokens, and audits PASSWORD_CHANGED", async () => {
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const registerResponse = await registerAndVerify(payload);
     const refreshToken = registerResponse.body.refreshToken as string;
     const nextPassword = "ChangedPass9!";
 
@@ -144,7 +160,7 @@ describe("Profile and password change", () => {
 
   it("rejects incorrect current password", async () => {
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const registerResponse = await registerAndVerify(payload);
 
     const response = await request(app)
       .patch("/api/v1/auth/me/password")
@@ -160,7 +176,7 @@ describe("Profile and password change", () => {
 
   it("blocks suspended users from login, refresh, and profile access", async () => {
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const registerResponse = await registerAndVerify(payload);
     const refreshToken = registerResponse.body.refreshToken as string;
 
     await prisma.user.update({

@@ -12,6 +12,7 @@ import { authRouter } from "./modules/auth/auth.routes.js";
 import { credentialRouter } from "./modules/credentials/credential.routes.js";
 import { readyHandler } from "./modules/health/ready.js";
 import { holderDashboardRouter } from "./modules/holder-dashboard/holder-dashboard.routes.js";
+import { metaRouter } from "./modules/meta/meta.routes.js";
 import { adminOrganizationRouter, organizationRouter } from "./modules/organizations/organization.routes.js";
 import { recipientInvitationAcceptRouter } from "./modules/organizations/recipient-invitation.routes.js";
 import { invitationAcceptRouter } from "./modules/invitations/invitation.routes.js";
@@ -37,6 +38,7 @@ export function createApp(options: CreateAppOptions = {}) {
     res.status(200).json({ status: "ok", service: "verifieddoc-api", version: "0.1.0" });
   });
   app.get("/api/v1/ready", readyHandler);
+  app.use("/api/v1/meta", metaRouter);
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/holder", holderDashboardRouter);
   app.use("/api/v1/verifier", verifierRouter);

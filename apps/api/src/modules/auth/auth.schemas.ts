@@ -1,5 +1,6 @@
 import { PlatformRole } from "@prisma/client";
 import { z } from "zod";
+import { normalizeIndustryInput } from "../../lib/industries.js";
 import { passwordPolicySchema } from "../../lib/password-policy.js";
 
 export const registrationAccountTypeSchema = z.enum(["HOLDER", "VERIFIER", "ORGANIZATION"]);
@@ -136,7 +137,12 @@ const organizationCanonicalSchema = z
     accountType: z.literal("ORGANIZATION"),
     ...personalCanonicalBase,
     companyName: z.string().trim().min(2).max(200),
-    industry: z.string().trim().min(2).max(100),
+    industry: z
+      .string()
+      .trim()
+      .min(2)
+      .max(100)
+      .transform((value) => normalizeIndustryInput(value)),
     country: z.string().trim().min(2).max(100),
     hrContact: z.unknown().optional(),
     hrcontact: z.unknown().optional()
@@ -206,10 +212,12 @@ export type CanonicalPersonalRegisterInput = z.infer<typeof holderCanonicalSchem
 export type CanonicalOrganizationRegisterInput = z.infer<typeof organizationCanonicalSchema>;
 export type LegacyRegisterInput = z.infer<typeof legacyRegisterSchema>;
 
-export const loginSchema = z.object({
-  email: z.string().email().transform((value) => value.toLowerCase()),
-  password: z.string().min(1)
-});
+export const loginSchema = z
+  .object({
+    email: z.string().email().transform((value) => value.toLowerCase()),
+    password: z.string().min(1)
+  })
+  .strict();
 
 export const refreshSchema = z.object({
   refreshToken: z.string().min(1)
@@ -218,6 +226,22 @@ export const refreshSchema = z.object({
 export const logoutSchema = z.object({
   refreshToken: z.string().min(1)
 });
+
+export const verifyEmailSchema = z
+  .object({
+    requestId: z.string().trim().min(1),
+    otp: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, "otp must be a six-digit code")
+  })
+  .strict();
+
+export const resendEmailVerificationSchema = z
+  .object({
+    email: z.string().email().transform((value) => value.toLowerCase())
+  })
+  .strict();
 
 export const updateProfileSchema = z
   .object({
@@ -284,3 +308,5 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type PasswordResetRequestInput = z.infer<typeof passwordResetRequestSchema>;
 export type PasswordResetVerifyInput = z.infer<typeof passwordResetVerifySchema>;
 export type PasswordResetConfirmInput = z.infer<typeof passwordResetConfirmSchema>;
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type ResendEmailVerificationInput = z.infer<typeof resendEmailVerificationSchema>;

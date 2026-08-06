@@ -69,6 +69,13 @@ passwords, database URLs, or tokens to the repository.
 | `JWT_REFRESH_SECRET` | Refresh-token signing secret (minimum 32 characters) |
 | `CORS_ORIGINS` | Comma-separated absolute frontend origins allowed by CORS |
 | `PUBLIC_WEB_URL` | Public web origin used when generating invitation and share links |
+| `EMAIL_VERIFICATION_ENABLED` | Usually `true` for production signup OTP gating |
+| `EMAIL_VERIFICATION_SECRET` | Distinct ≥32-char secret for signup OTP HMAC (not equal to JWT/password-reset secrets) |
+| `PASSWORD_RESET_SECRET` | Distinct ≥32-char secret for password-reset OTP HMAC |
+| `RESEND_API_KEY` | Required for real signup-verification and password-reset email |
+| `MAIL_FROM` | Plain From email for Resend (e.g. `noreply@example.com`) |
+
+See `docs/BACKEND-DEPLOYMENT-REQUIREMENTS.md` for optional TTL/cooldown vars and full notes.
 
 `CORS_ORIGINS` and `PUBLIC_WEB_URL` must use absolute `http://` or `https://`
 origins without trailing paths, query strings, fragments, or embedded

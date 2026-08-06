@@ -3,6 +3,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
+import { getTestOtpForRequest } from "../src/services/email/index.js";
 import {
   cleanupTestData,
   createRegisterPayload,
@@ -25,6 +26,22 @@ function canonicalHolder(overrides: Record<string, unknown> = {}) {
   };
 }
 
+async function registerAndVerify(payload: Record<string, unknown>) {
+  const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+  expect(registerResponse.status).toBe(201);
+  expect(registerResponse.body.verificationRequired).toBe(true);
+
+  const requestId = registerResponse.body.verificationRequestId as string;
+  const otp = getTestOtpForRequest(requestId);
+  expect(otp).toBeDefined();
+
+  const verifyResponse = await request(app)
+    .post("/api/v1/auth/email-verification/verify")
+    .send({ requestId, otp });
+  expect(verifyResponse.status).toBe(200);
+  return { registerResponse, verifyResponse };
+}
+
 describe("Registration contract alignment", () => {
   beforeAll(async () => {
     await cleanupTestData();
@@ -40,10 +57,15 @@ describe("Registration contract alignment", () => {
 
   it("registers a holder using fullName and phone", async () => {
     const payload = canonicalHolder();
-    const response = await request(app).post("/api/v1/auth/register").send(payload);
+    const { registerResponse, verifyResponse } = await registerAndVerify(payload);
 
-    expect(response.status).toBe(201);
-    expect(response.body.user).toMatchObject({
+    expect(registerResponse.body).toMatchObject({
+      verificationRequired: true,
+      email: payload.email
+    });
+    expect(registerResponse.body.accessToken).toBeUndefined();
+
+    expect(verifyResponse.body.user).toMatchObject({
       email: payload.email,
       fullName: "Jane Mary Holder",
       firstName: "Jane",
@@ -52,9 +74,9 @@ describe("Registration contract alignment", () => {
       role: "HOLDER",
       status: "ACTIVE"
     });
-    expect(response.body.accessToken).toEqual(expect.any(String));
-    expect(response.body.refreshToken).toEqual(expect.any(String));
-    expect(JSON.stringify(response.body)).not.toMatch(/passwordHash|confirmPassword/i);
+    expect(verifyResponse.body.accessToken).toEqual(expect.any(String));
+    expect(verifyResponse.body.refreshToken).toEqual(expect.any(String));
+    expect(JSON.stringify(verifyResponse.body)).not.toMatch(/passwordHash|confirmPassword/i);
   });
 
   it("registers a verifier using fullName and phone", async () => {
@@ -63,19 +85,17 @@ describe("Registration contract alignment", () => {
       fullName: "Victor Verifier",
       email: `verifier.${Date.now()}@example.test`
     });
-    const response = await request(app).post("/api/v1/auth/register").send(payload);
+    const { verifyResponse } = await registerAndVerify(payload);
 
-    expect(response.status).toBe(201);
-    expect(response.body.user.role).toBe("VERIFIER");
-    expect(response.body.user.fullName).toBe("Victor Verifier");
+    expect(verifyResponse.body.user.role).toBe("VERIFIER");
+    expect(verifyResponse.body.user.fullName).toBe("Victor Verifier");
   });
 
   it("keeps legacy firstName/lastName registration working", async () => {
     const payload = createRegisterPayload({ firstName: "Legacy", lastName: "User" });
-    const response = await request(app).post("/api/v1/auth/register").send(payload);
+    const { verifyResponse } = await registerAndVerify(payload);
 
-    expect(response.status).toBe(201);
-    expect(response.body.user).toMatchObject({
+    expect(verifyResponse.body.user).toMatchObject({
       fullName: "Legacy User",
       firstName: "Legacy",
       lastName: "User",
@@ -115,10 +135,11 @@ describe("Registration contract alignment", () => {
   });
 
   it("normalizes phone to E.164 and rejects invalid phones", async () => {
-    const ok = await request(app)
-      .post("/api/v1/auth/register")
-      .send(canonicalHolder({ phone: "+256 700 000 123", email: `phone.ok.${Date.now()}@example.test` }));
-    expect(ok.status).toBe(201);
+    const okPayload = canonicalHolder({
+      phone: "+256 700 000 123",
+      email: `phone.ok.${Date.now()}@example.test`
+    });
+    const { verifyResponse: ok } = await registerAndVerify(okPayload);
     expect(ok.body.user.phone).toBe("+256700000123");
 
     const bad = await request(app)
@@ -129,10 +150,7 @@ describe("Registration contract alignment", () => {
 
   it("rejects duplicate normalized phone numbers", async () => {
     const phone = "+256701112233";
-    const first = await request(app)
-      .post("/api/v1/auth/register")
-      .send(canonicalHolder({ phone, email: `dup1.${Date.now()}@example.test` }));
-    expect(first.status).toBe(201);
+    await registerAndVerify(canonicalHolder({ phone, email: `dup1.${Date.now()}@example.test` }));
 
     const second = await request(app)
       .post("/api/v1/auth/register")
@@ -164,7 +182,13 @@ describe("Registration contract alignment", () => {
 
     const withoutIndustry = await request(app)
       .post("/api/v1/auth/register")
-      .send({ ...base, email: `org.ind.${Date.now()}@example.test`, companyName: "Lumora", country: "Uganda", hrContact: "hr@example.test" });
+      .send({
+        ...base,
+        email: `org.ind.${Date.now()}@example.test`,
+        companyName: "Lumora",
+        country: "Uganda",
+        hrContact: "hr@example.test"
+      });
     expect(withoutIndustry.status).toBe(400);
 
     const withoutHr = await request(app)
@@ -180,27 +204,24 @@ describe("Registration contract alignment", () => {
   });
 
   it("accepts canonical hrContact object and deprecated hrcontact alias", async () => {
-    const canonical = await request(app)
-      .post("/api/v1/auth/register")
-      .send({
-        accountType: "ORGANIZATION",
-        fullName: "Jane Smith",
-        email: `org.canon.${Date.now()}@example.test`,
-        phone: "+256703334455",
-        password: "SecurePassword1!",
-        confirmPassword: "SecurePassword1!",
-        companyName: "Lumora Solutions",
-        industry: "Technology",
-        country: "Uganda",
-        hrContact: {
-          fullName: "Mary Human",
-          email: "hr@lumora.test",
-          phone: "+256711111111"
-        },
-        acceptedTerms: true
-      });
+    const { verifyResponse: canonical } = await registerAndVerify({
+      accountType: "ORGANIZATION",
+      fullName: "Jane Smith",
+      email: `org.canon.${Date.now()}@example.test`,
+      phone: "+256703334455",
+      password: "SecurePassword1!",
+      confirmPassword: "SecurePassword1!",
+      companyName: "Lumora Solutions",
+      industry: "Technology",
+      country: "Uganda",
+      hrContact: {
+        fullName: "Mary Human",
+        email: "hr@lumora.test",
+        phone: "+256711111111"
+      },
+      acceptedTerms: true
+    });
 
-    expect(canonical.status).toBe(201);
     expect(canonical.body.organization).toMatchObject({
       name: "Lumora Solutions",
       industry: "Technology",
@@ -209,22 +230,20 @@ describe("Registration contract alignment", () => {
     });
     expect(canonical.body.user.role).toBe(PlatformRole.HOLDER);
 
-    const alias = await request(app)
-      .post("/api/v1/auth/register")
-      .send({
-        accountType: "ORGANIZATION",
-        fullName: "Jane Smith",
-        email: `org.alias.${Date.now()}@example.test`,
-        phone: "+256704445566",
-        password: "SecurePassword1!",
-        confirmPassword: "SecurePassword1!",
-        companyName: "Alias Org",
-        industry: "Education",
-        country: "Uganda",
-        hrcontact: "hr@alias.test",
-        acceptedTerms: true
-      });
-    expect(alias.status).toBe(201);
+    const { verifyResponse: alias } = await registerAndVerify({
+      accountType: "ORGANIZATION",
+      fullName: "Jane Smith",
+      email: `org.alias.${Date.now()}@example.test`,
+      phone: "+256704445566",
+      password: "SecurePassword1!",
+      confirmPassword: "SecurePassword1!",
+      companyName: "Alias Org",
+      industry: "Education",
+      country: "Uganda",
+      hrcontact: "hr@alias.test",
+      acceptedTerms: true
+    });
+    expect(alias.body.organization.industry).toBe("EDUCATION");
   });
 
   it("rejects sending both hrContact and hrcontact", async () => {
@@ -250,28 +269,25 @@ describe("Registration contract alignment", () => {
 
   it("creates user, pending organization, and ORGANIZATION_ADMIN membership without PlatformRole ORGANIZATION_ADMIN", async () => {
     const email = `org.full.${Date.now()}@example.test`;
-    const response = await request(app)
-      .post("/api/v1/auth/register")
-      .send({
-        accountType: "ORGANIZATION",
-        fullName: "Admin Person",
-        email,
-        phone: "+256706667788",
-        password: "SecurePassword1!",
-        confirmPassword: "SecurePassword1!",
-        companyName: "Northwind Institute",
-        industry: "Education",
-        country: "Uganda",
-        hrContact: { email: "hr@northwind.test" },
-        acceptedTerms: true
-      });
-
-    expect(response.status).toBe(201);
+    await registerAndVerify({
+      accountType: "ORGANIZATION",
+      fullName: "Admin Person",
+      email,
+      phone: "+256706667788",
+      password: "SecurePassword1!",
+      confirmPassword: "SecurePassword1!",
+      companyName: "Northwind Institute",
+      industry: "Education",
+      country: "Uganda",
+      hrContact: { email: "hr@northwind.test" },
+      acceptedTerms: true
+    });
 
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
     expect(user.role).toBe(PlatformRole.HOLDER);
     expect(user.termsAcceptedAt).not.toBeNull();
     expect(user.privacyAcceptedAt).not.toBeNull();
+    expect(user.emailVerifiedAt).not.toBeNull();
 
     const membership = await prisma.organizationMember.findFirstOrThrow({
       where: { userId: user.id },
@@ -280,6 +296,7 @@ describe("Registration contract alignment", () => {
     expect(membership.role).toBe(OrganizationRole.ORGANIZATION_ADMIN);
     expect(membership.organization.status).toBe(OrganizationStatus.PENDING);
     expect(membership.organization.hrContactEmail).toBe("hr@northwind.test");
+    expect(membership.organization.industry).toBe("EDUCATION");
   });
 
   it("rolls back completely when organization creation fails due to slug exhaustion simulation", async () => {

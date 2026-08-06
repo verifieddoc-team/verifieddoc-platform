@@ -42,6 +42,12 @@ export const passwordResetRateLimiter = createRateLimiter({
   message: "Too many password reset attempts, please try again later"
 });
 
+export const emailVerificationRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: isTest ? 1000 : 20,
+  message: "Too many email verification attempts, please try again later"
+});
+
 export const fileVerificationRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: isTest ? 10000 : 30,

@@ -89,7 +89,9 @@ export async function createTestUser(
       firstName: names.firstName,
       lastName: names.lastName,
       fullName: names.fullName,
-      role
+      role,
+      // Test fixtures represent already-verified accounts.
+      emailVerifiedAt: new Date()
     }
   });
 
@@ -410,14 +412,67 @@ export async function disconnectTestDatabase() {
 }
 
 export async function registerAndAuthenticate(app: Express, overrides: Record<string, unknown> = {}) {
+  const { getTestOtpForRequest } = await import("../../src/services/email/index.js");
   const payload = createRegisterPayload(overrides);
-  const response = await request(app).post("/api/v1/auth/register").send(payload);
+  const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+
+  if (registerResponse.status !== 201) {
+    throw new Error(
+      `registerAndAuthenticate failed: ${registerResponse.status} ${JSON.stringify(registerResponse.body)}`
+    );
+  }
+
+  if (registerResponse.body.verificationRequired) {
+    const requestId = registerResponse.body.verificationRequestId as string;
+    const otp = getTestOtpForRequest(requestId);
+    if (!otp) {
+      throw new Error(`Missing verification OTP for request ${requestId}`);
+    }
+
+    const verifyResponse = await request(app)
+      .post("/api/v1/auth/email-verification/verify")
+      .send({ requestId, otp });
+
+    if (verifyResponse.status !== 200) {
+      throw new Error(
+        `email verification failed: ${verifyResponse.status} ${JSON.stringify(verifyResponse.body)}`
+      );
+    }
+
+    return {
+      payload,
+      user: verifyResponse.body.user,
+      accessToken: verifyResponse.body.accessToken as string,
+      refreshToken: verifyResponse.body.refreshToken as string
+    };
+  }
 
   return {
     payload,
-    user: response.body.user,
-    accessToken: response.body.accessToken as string
+    user: registerResponse.body.user,
+    accessToken: registerResponse.body.accessToken as string,
+    refreshToken: registerResponse.body.refreshToken as string
   };
+}
+
+/** Register then complete signup OTP verification; returns the AuthSession body. */
+export async function registerVerifyAndGetSession(
+  app: Express,
+  payload: Record<string, unknown>
+) {
+  const { getTestOtpForRequest } = await import("../../src/services/email/index.js");
+  const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+  if (registerResponse.status !== 201 || !registerResponse.body.verificationRequired) {
+    return registerResponse;
+  }
+
+  const requestId = registerResponse.body.verificationRequestId as string;
+  const otp = getTestOtpForRequest(requestId);
+  const verifyResponse = await request(app)
+    .post("/api/v1/auth/email-verification/verify")
+    .send({ requestId, otp });
+
+  return verifyResponse;
 }
 
 export async function loginAndGetAccessToken(app: Express, email: string, password = TEST_PASSWORD) {

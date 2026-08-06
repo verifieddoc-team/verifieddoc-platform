@@ -26,6 +26,8 @@ export interface PublicUser {
   phone: string | null;
   role: PlatformRole;
   status: UserStatus;
+  /** ISO timestamp when signup email was verified; null until verification completes. */
+  emailVerifiedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +45,53 @@ export interface AuthSession {
   accessToken: string;
   refreshToken: string;
   organization?: OrganizationRegistrationSummary;
+}
+
+/** Returned by POST /auth/register when signup email verification is required. */
+export interface PendingEmailVerificationRegistrationResponse {
+  verificationRequired: true;
+  verificationRequestId: string;
+  email: string;
+  maskedEmail: string;
+  expiresInSeconds: number;
+  resendAvailableInSeconds: number;
+}
+
+export type RegisterResponse =
+  | PendingEmailVerificationRegistrationResponse
+  | AuthSession;
+
+export interface VerifyEmailInput {
+  requestId: string;
+  otp: string;
+}
+
+export type VerifyEmailResponse = AuthSession;
+
+export interface ResendEmailVerificationInput {
+  email: string;
+}
+
+export interface ResendEmailVerificationResponse {
+  verificationRequestId: string;
+  expiresInSeconds: number;
+  resendAvailableInSeconds: number;
+}
+
+export interface IndustryOption {
+  code: string;
+  label: string;
+}
+
+export interface IndustryListResponse {
+  industries: IndustryOption[];
+}
+
+/** details payload for API error code EMAIL_NOT_VERIFIED (HTTP 403). */
+export interface EmailNotVerifiedErrorDetails {
+  verificationRequired: true;
+  email: string;
+  maskedEmail: string;
 }
 
 export interface Organization {

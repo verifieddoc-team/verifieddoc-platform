@@ -30,6 +30,7 @@ const publicUserSelect = {
   phone: true,
   role: true,
   status: true,
+  emailVerifiedAt: true,
   createdAt: true,
   updatedAt: true
 } as const;

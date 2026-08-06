@@ -59,6 +59,7 @@ export async function updateOrganizationMemberRole(
             phone: true,
             role: true,
             status: true,
+            emailVerifiedAt: true,
             createdAt: true,
             updatedAt: true
           }
@@ -147,6 +148,7 @@ export async function updateOrganizationMemberRole(
               phone: true,
               role: true,
               status: true,
+              emailVerifiedAt: true,
               createdAt: true,
               updatedAt: true
             }

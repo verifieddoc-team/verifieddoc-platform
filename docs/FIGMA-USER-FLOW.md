@@ -211,7 +211,8 @@ Flag “Verified At” column as inconsistent for Pending/Rejected rows; recomme
 
 Backend + contracts support today (canonical `/api/v1` prefix omitted below):
 
-- Auth: register (HOLDER/VERIFIER/ORGANIZATION + legacy), login, refresh, logout, me, profile patch, change password, password-reset
+- Auth: register (HOLDER/VERIFIER/ORGANIZATION + legacy → pending email verification), email-verification verify/resend, login (email+password only; rejects unverified), refresh, logout, me, profile patch, change password, password-reset (separate OTP table/secret)
+- Metadata: `GET /meta/industries` (public industry catalog for organization registration)
 - Holder: dashboard (incl. pending/shared/activity), activity feed, verification requests, personal documents, wallet, share links
 - Verifier: dashboard, authenticated verify, history, saved orgs, verification requests, file-hash verify
 - Public verify: `GET /verify/:token` (records VerificationEvent)

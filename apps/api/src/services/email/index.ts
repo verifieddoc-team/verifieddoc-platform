@@ -1,15 +1,20 @@
 import { env } from "../../config/env.js";
-import {
-  clearTestEmailState,
-  getMemoryEmailAdapter,
-  getTestEmailInbox,
-  getTestOtpForRequest
-} from "./memory-email.adapter.js";
+import { getMemoryEmailAdapter } from "./memory-email.adapter.js";
 import { getResendEmailAdapter } from "./resend-email.adapter.js";
 import type { EmailService } from "./types.js";
 
-export type { EmailService, SendPasswordResetOtpParams, SentEmailMessage } from "./types.js";
-export { getTestEmailInbox, getTestOtpForRequest, clearTestEmailState };
+export type {
+  EmailService,
+  SendEmailVerificationOtpParams,
+  SendPasswordResetOtpParams,
+  SentEmailMessage
+} from "./types.js";
+export {
+  getTestEmailInbox,
+  getTestOtpForRequest,
+  getLatestTestEmailVerificationOtp,
+  clearTestEmailState
+} from "./memory-email.adapter.js";
 
 export function isEmailDeliveryConfigured(): boolean {
   if (env.NODE_ENV === "test") {

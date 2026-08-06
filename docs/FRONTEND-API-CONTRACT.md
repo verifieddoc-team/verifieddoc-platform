@@ -56,53 +56,36 @@ Common errors: `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404
 - **Method / path:** `POST /auth/register`
 - **Role:** Public
 - **Headers:** `Content-Type: application/json`
-- **Request:**
+- **Request (canonical):** prefer `accountType` + `fullName` / `phone` / `acceptedTerms` (see OpenAPI). Legacy firstName/lastName still accepted temporarily.
+- **Success `201` (email verification enabled — default):** pending verification (no tokens):
 
 ```json
 {
+  "verificationRequired": true,
+  "verificationRequestId": "opaque-id",
   "email": "holder@example.com",
-  "password": "Str0ng-Pass!",
-  "firstName": "Amara",
-  "lastName": "Ndlovu",
-  "role": "HOLDER"
+  "maskedEmail": "h***@example.com",
+  "expiresInSeconds": 600,
+  "resendAvailableInSeconds": 60
 }
 ```
 
-`role` optional; allowed values `HOLDER` | `VERIFIER` (default `HOLDER`).
+Then call `POST /auth/email-verification/verify` with `{ requestId, otp }` to obtain `AuthSession`.
+Resend via `POST /auth/email-verification/resend` with `{ email }`.
 
-- **Success `201`:**
+See `docs/AUTH-REGISTRATION-ALIGNMENT.md` for mobile field mapping and Verifier vs Organization rules.
 
-```json
-{
-  "user": {
-    "id": "clx...",
-    "email": "holder@example.com",
-    "firstName": "Amara",
-    "lastName": "Ndlovu",
-    "role": "HOLDER",
-    "createdAt": "2026-08-05T12:00:00.000Z",
-    "updatedAt": "2026-08-05T12:00:00.000Z"
-  },
-  "accessToken": "<jwt>",
-  "refreshToken": "<opaque>"
-}
-```
-
-- **Errors:** `400`, `409`, `429`
-- **Usage:**
-
-```ts
-await api.register({ email, password, firstName, lastName, role: "HOLDER" });
-```
+- **Errors:** `400`, `409` (`EMAIL_ALREADY_EXISTS` | `EMAIL_VERIFICATION_REQUIRED`), `429`, `503`
+- **Industries:** `GET /meta/industries` (public) for organization registration codes/labels.
 
 ### Login — Auth
 
 - **Method / path:** `POST /auth/login`
 - **Role:** Public
-- **Request:** `{ "email", "password" }`
-- **Success `200`:** AuthSession (same shape as register)
-- **Errors:** `401`, `429`
-- **Usage:** `await api.login(email, password)`
+- **Request:** `{ "email", "password" }` only — do **not** send `role`
+- **Success `200`:** AuthSession (`user.role` is the database PlatformRole)
+- **Errors:** `401`, `403 EMAIL_NOT_VERIFIED`, `429`
+- **Usage:** `await api.login(email, password)` then route by `user.role` + organization memberships
 
 ### Refresh — Auth
 

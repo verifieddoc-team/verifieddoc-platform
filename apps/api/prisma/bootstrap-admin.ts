@@ -77,7 +77,8 @@ export async function bootstrapPlatformAdmin(input: AdminBootstrapInput): Promis
       passwordHash,
       firstName: "Platform",
       lastName: "Admin",
-      role: PlatformRole.PLATFORM_ADMIN
+      role: PlatformRole.PLATFORM_ADMIN,
+      emailVerifiedAt: new Date()
     }
   });
 

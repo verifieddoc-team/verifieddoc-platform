@@ -110,14 +110,14 @@ enum NotificationType {
 }
 
 model User {
-  id                            String                   @id @default(cuid())
-  email                         String                   @unique
+  id                            String                       @id @default(cuid())
+  email                         String                       @unique
   passwordHash                  String
-  fullName                      String                   @default("")
+  fullName                      String                       @default("")
   firstName                     String
   lastName                      String
-  phone                         String?                  @unique
-  status                        UserStatus               @default(ACTIVE)
+  phone                         String?                      @unique
+  status                        UserStatus                   @default(ACTIVE)
   suspendedAt                   DateTime?
   suspendedReason               String?
   suspendedById                 String?
@@ -125,41 +125,45 @@ model User {
   privacyAcceptedAt             DateTime?
   termsVersion                  String?
   privacyVersion                String?
-  role                          PlatformRole             @default(HOLDER)
+  role                          PlatformRole                 @default(HOLDER)
+  /// Null means the account has not completed signup email verification.
+  /// Existing production users are backfilled to createdAt by migration so they are not locked out.
+  emailVerifiedAt               DateTime?
   memberships                   OrganizationMember[]
-  credentials                   Credential[]             @relation("CredentialHolder")
-  issued                        Credential[]             @relation("CredentialIssuer")
-  revokedCredentials            Credential[]             @relation("CredentialRevoker")
-  shareLinks                    ShareLink[]              @relation("ShareLinkCreator")
-  revokedShareLinks             ShareLink[]              @relation("ShareLinkRevoker")
-  auditLogs                     AuditLog[]               @relation("AuditActor")
+  credentials                   Credential[]                 @relation("CredentialHolder")
+  issued                        Credential[]                 @relation("CredentialIssuer")
+  revokedCredentials            Credential[]                 @relation("CredentialRevoker")
+  shareLinks                    ShareLink[]                  @relation("ShareLinkCreator")
+  revokedShareLinks             ShareLink[]                  @relation("ShareLinkRevoker")
+  auditLogs                     AuditLog[]                   @relation("AuditActor")
   refreshTokens                 RefreshToken[]
-  reviewedOrganizations         Organization[]           @relation("OrganizationReviewer")
-  sentInvitations               OrganizationInvitation[] @relation("InvitationInviter")
-  acceptedInvitations           OrganizationInvitation[] @relation("InvitationAccepter")
-  revokedInvitations            OrganizationInvitation[] @relation("InvitationRevoker")
+  reviewedOrganizations         Organization[]               @relation("OrganizationReviewer")
+  sentInvitations               OrganizationInvitation[]     @relation("InvitationInviter")
+  acceptedInvitations           OrganizationInvitation[]     @relation("InvitationAccepter")
+  revokedInvitations            OrganizationInvitation[]     @relation("InvitationRevoker")
   passwordResetChallenges       PasswordResetChallenge[]
-  suspendedBy                   User?                    @relation("UserSuspender", fields: [suspendedById], references: [id], onDelete: SetNull)
-  suspendedUsers                User[]                   @relation("UserSuspender")
-  verificationEvents            VerificationEvent[]      @relation("VerificationActor")
-  verificationRequestsMade      VerificationRequest[]    @relation("VerificationRequester")
-  verificationRequestsReviewed  VerificationRequest[]    @relation("VerificationReviewer")
-  heldVerificationRequests      VerificationRequest[]    @relation("VerificationHolder")
+  emailVerificationChallenges   EmailVerificationChallenge[]
+  suspendedBy                   User?                        @relation("UserSuspender", fields: [suspendedById], references: [id], onDelete: SetNull)
+  suspendedUsers                User[]                       @relation("UserSuspender")
+  verificationEvents            VerificationEvent[]          @relation("VerificationActor")
+  verificationRequestsMade      VerificationRequest[]        @relation("VerificationRequester")
+  verificationRequestsReviewed  VerificationRequest[]        @relation("VerificationReviewer")
+  heldVerificationRequests      VerificationRequest[]        @relation("VerificationHolder")
   savedOrganizations            SavedOrganization[]
   organizationRecipients        OrganizationRecipient[]
-  recipientInvitationsSent      RecipientInvitation[]    @relation("RecipientInviter")
-  recipientInvitationsAccepted  RecipientInvitation[]    @relation("RecipientAccepter")
-  recipientInvitationsRevoked   RecipientInvitation[]    @relation("RecipientRevoker")
-  organizationDocumentsUploaded OrganizationDocument[]   @relation("OrgDocumentUploader")
-  organizationDocumentsReviewed OrganizationDocument[]   @relation("OrgDocumentReviewer")
+  recipientInvitationsSent      RecipientInvitation[]        @relation("RecipientInviter")
+  recipientInvitationsAccepted  RecipientInvitation[]        @relation("RecipientAccepter")
+  recipientInvitationsRevoked   RecipientInvitation[]        @relation("RecipientRevoker")
+  organizationDocumentsUploaded OrganizationDocument[]       @relation("OrgDocumentUploader")
+  organizationDocumentsReviewed OrganizationDocument[]       @relation("OrgDocumentReviewer")
   credentialArtifactsUploaded   CredentialArtifact[]
   personalDocuments             PersonalDocument[]
   verificationUploads           VerificationUpload[]
-  fraudAlertsResolved           FraudAlert[]             @relation("FraudAlertResolver")
-  fraudAlertsAsActor            FraudAlert[]             @relation("FraudAlertActor")
+  fraudAlertsResolved           FraudAlert[]                 @relation("FraudAlertResolver")
+  fraudAlertsAsActor            FraudAlert[]                 @relation("FraudAlertActor")
   notifications                 Notification[]
-  createdAt                     DateTime                 @default(now())
-  updatedAt                     DateTime                 @updatedAt
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
 
   @@index([status])
   @@index([createdAt])
@@ -202,6 +206,28 @@ model PasswordResetChallenge {
 
   @@index([userId, createdAt])
   @@index([expiresAt])
+}
+
+/// Signup email-verification OTP challenge. Kept separate from PasswordResetChallenge.
+model EmailVerificationChallenge {
+  id                String    @id @default(cuid())
+  userId            String
+  otpHash           String
+  attempts          Int       @default(0)
+  expiresAt         DateTime
+  verifiedAt        DateTime?
+  lockedAt          DateTime?
+  invalidatedAt     DateTime?
+  resendAvailableAt DateTime
+  requestedIp       String?
+  userAgent         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@index([resendAvailableAt])
 }
 
 model Organization {

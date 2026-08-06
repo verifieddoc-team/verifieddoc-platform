@@ -8,7 +8,9 @@ import {
   refreshSession,
   registerUser,
   requestPasswordReset,
+  resendEmailVerification,
   updateProfile,
+  verifyEmailVerification,
   verifyPasswordResetOtp
 } from "./auth.service.js";
 
@@ -20,8 +22,8 @@ function getSessionContext(req: Request) {
 }
 
 export async function registerHandler(req: Request, res: Response) {
-  const session = await registerUser(req.body, getSessionContext(req));
-  res.status(201).json(session);
+  const result = await registerUser(req.body, getSessionContext(req));
+  res.status(201).json(result);
 }
 
 export async function loginHandler(req: Request, res: Response) {
@@ -67,4 +69,14 @@ export async function passwordResetVerifyHandler(req: Request, res: Response) {
 export async function passwordResetConfirmHandler(req: Request, res: Response) {
   await confirmPasswordReset(req.body, getSessionContext(req));
   res.status(204).send();
+}
+
+export async function verifyEmailHandler(req: Request, res: Response) {
+  const session = await verifyEmailVerification(req.body, getSessionContext(req));
+  res.status(200).json(session);
+}
+
+export async function resendEmailVerificationHandler(req: Request, res: Response) {
+  const result = await resendEmailVerification(req.body, getSessionContext(req));
+  res.status(202).json(result);
 }

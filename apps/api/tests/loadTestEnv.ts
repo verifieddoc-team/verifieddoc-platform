@@ -12,7 +12,10 @@ export const DETERMINISTIC_TEST_ENV = {
   PUBLIC_WEB_URL: "http://localhost:3000",
   CORS_ORIGINS: "http://localhost:3000",
   JWT_ACCESS_SECRET: "test-access-secret-with-at-least-32-characters",
-  JWT_REFRESH_SECRET: "test-refresh-secret-with-at-least-32-characters"
+  JWT_REFRESH_SECRET: "test-refresh-secret-with-at-least-32-characters",
+  PASSWORD_RESET_SECRET: "test-password-reset-secret-with-32-chars",
+  EMAIL_VERIFICATION_ENABLED: "true",
+  EMAIL_VERIFICATION_SECRET: "test-email-verification-secret-32chars!!"
 } as const;
 
 /**
