@@ -63,6 +63,10 @@ export async function applyForOrganization(
           contactEmail: input.contactEmail,
           country: input.country,
           description: input.description,
+          industry: input.industry ?? null,
+          hrContactName: input.hrContactName ?? null,
+          hrContactEmail: null,
+          hrContactPhone: null,
           status: OrganizationStatus.PENDING
         }
       });

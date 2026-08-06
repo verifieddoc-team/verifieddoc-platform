@@ -4,6 +4,7 @@ import {
   VerificationRequestStatus
 } from "@prisma/client";
 import { z } from "zod";
+import { normalizeIndustryInput } from "../../lib/industries.js";
 
 const REGISTRATION_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
 const REGISTRATION_DOCUMENT_MIME_TYPES = [
@@ -57,7 +58,17 @@ export const createOrganizationSchema = z
     website: secureWebsiteSchema.optional(),
     contactEmail: z.string().trim().email().max(320).transform((value) => value.toLowerCase()),
     country: z.string().trim().min(2).max(100),
-    description: z.string().trim().min(1).max(2000).optional()
+    description: z.string().trim().min(1).max(2000).optional(),
+    /** Figma-only optional metadata; not required by the PRD. */
+    industry: z
+      .string()
+      .trim()
+      .min(2)
+      .max(100)
+      .transform((value) => normalizeIndustryInput(value))
+      .optional(),
+    /** Figma-only optional metadata; HR email/phone are not required on create. */
+    hrContactName: z.string().trim().min(1).max(200).optional()
   })
   .strict();
 

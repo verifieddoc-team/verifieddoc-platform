@@ -1,6 +1,6 @@
 /**
- * Canonical public industry catalog for organization registration.
- * Codes are stable API identifiers; labels match the mobile signup design list.
+ * Canonical public industry catalog for optional organization-application metadata.
+ * Codes are stable API identifiers; labels match the mobile design list.
  * No OTHER option — the approved design list does not include one.
  */
 export const INDUSTRIES = [

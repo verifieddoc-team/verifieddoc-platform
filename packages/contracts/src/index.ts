@@ -129,11 +129,15 @@ export interface OrganizationMembershipView {
 export interface CreateOrganizationInput {
   name: string;
   slug: string;
-  registrationNumber?: string;
-  website?: string;
   contactEmail: string;
   country: string;
+  registrationNumber?: string;
+  website?: string;
   description?: string;
+  /** Optional Figma metadata; prefer a code from GET /meta/industries. */
+  industry?: string;
+  /** Optional Figma metadata; HR email/phone are not required on create. */
+  hrContactName?: string;
 }
 
 export interface ReviewOrganizationInput {
