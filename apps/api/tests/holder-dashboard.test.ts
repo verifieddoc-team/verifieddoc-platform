@@ -79,16 +79,22 @@ describe("Holder dashboard", () => {
     expect(response.status).toBe(200);
     expect(Object.keys(response.body).sort()).toEqual([
       "holder",
+      "recentActivity",
       "recentCredentials",
       "stats"
     ]);
     expect(Object.keys(response.body.stats).sort()).toEqual([
       "active",
       "expired",
+      "pendingVerifications",
       "revoked",
+      "sharedThisMonth",
       "total"
     ]);
     expect(response.body.holder.role).toBe("HOLDER");
+    expect(response.body.holder.fullName).toBe("Fictional Holder");
+    expect(response.body.holder.firstName).toBe("Fictional");
+    expect(response.body.holder.lastName).toBe("Holder");
   });
 
   it("returns zero counts and an empty recentCredentials array for empty holders", async () => {
@@ -103,9 +109,12 @@ describe("Holder dashboard", () => {
       total: 0,
       active: 0,
       expired: 0,
-      revoked: 0
+      revoked: 0,
+      pendingVerifications: 0,
+      sharedThisMonth: 0
     });
     expect(response.body.recentCredentials).toEqual([]);
+    expect(response.body.recentActivity).toEqual([]);
   });
 
   it("returns only the authenticated holder's credentials and correct effective counts", async () => {
@@ -171,13 +180,23 @@ describe("Holder dashboard", () => {
       .set("Authorization", `Bearer ${holder.accessToken}`);
 
     expect(response.status).toBe(200);
-    expect(response.body.stats).toEqual({
+    expect(response.body.stats).toMatchObject({
       total: 3,
       active: 1,
       expired: 1,
-      revoked: 1
+      revoked: 1,
+      pendingVerifications: 0,
+      sharedThisMonth: 0
     });
     expect(response.body.recentCredentials).toHaveLength(3);
+    expect(response.body.recentActivity.length).toBeGreaterThan(0);
+    expect(
+      response.body.recentActivity.every((item: { type: string }) =>
+        ["CREDENTIAL_ISSUED", "SHARE_LINK_CREATED", "VERIFICATION_EVENT", "VERIFICATION_REQUEST"].includes(
+          item.type
+        )
+      )
+    ).toBe(true);
     expect(
       response.body.recentCredentials.every(
         (credential: { id: string }) => credential.id !== otherHolderCredential.body.credential.id
@@ -225,5 +244,64 @@ describe("Holder dashboard", () => {
       (credential: { issuedAt: string }) => new Date(credential.issuedAt).getTime()
     );
     expect(issuedAtValues).toEqual([...issuedAtValues].sort((left, right) => right - left));
+  });
+
+  it("lists holder activity and personal documents", async () => {
+    const { admin, organizationId } = await setupVerifiedOrganization(app);
+    const holder = await registerHolder(app);
+
+    const issued = await issueCredentialRequest(app, organizationId, admin.accessToken, {
+      holderEmail: holder.payload.email
+    });
+    expect(issued.status).toBe(201);
+
+    const activityResponse = await request(app)
+      .get("/api/v1/holder/activity")
+      .set("Authorization", `Bearer ${holder.accessToken}`);
+
+    expect(activityResponse.status).toBe(200);
+    expect(activityResponse.body.data.length).toBeGreaterThan(0);
+    expect(activityResponse.body.data[0]).toMatchObject({
+      type: "CREDENTIAL_ISSUED",
+      title: expect.stringContaining("Credential issued")
+    });
+
+    const uploadResponse = await request(app)
+      .post("/api/v1/holder/documents/upload-url")
+      .set("Authorization", `Bearer ${holder.accessToken}`)
+      .send({
+        title: "Passport scan",
+        documentType: "IDENTITY",
+        originalFileName: "passport.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 1024
+      });
+
+    expect(uploadResponse.status).toBe(201);
+    expect(uploadResponse.body.documentId).toEqual(expect.any(String));
+    expect(uploadResponse.body.uploadUrl).toEqual(expect.any(String));
+
+    const completeResponse = await request(app)
+      .post(`/api/v1/holder/documents/${uploadResponse.body.documentId}/complete`)
+      .set("Authorization", `Bearer ${holder.accessToken}`)
+      .send({ fileContent: "personal-doc-bytes" });
+
+    expect(completeResponse.status).toBe(200);
+    expect(completeResponse.body.document.uploadedAt).toEqual(expect.any(String));
+
+    const listResponse = await request(app)
+      .get("/api/v1/holder/documents")
+      .set("Authorization", `Bearer ${holder.accessToken}`);
+
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.data).toHaveLength(1);
+    expect(JSON.stringify(listResponse.body)).not.toMatch(/storagePath/i);
+
+    const deleteResponse = await request(app)
+      .delete(`/api/v1/holder/documents/${uploadResponse.body.documentId}`)
+      .set("Authorization", `Bearer ${holder.accessToken}`);
+
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body.deleted).toBe(true);
   });
 });

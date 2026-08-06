@@ -1,5 +1,6 @@
 import {
   CredentialStatus,
+  NotificationType,
   OrganizationRole,
   OrganizationStatus
 } from "@prisma/client";
@@ -14,6 +15,7 @@ import {
   type OrganizationCredentialSummary,
   type SafeCredential
 } from "../../lib/credentials.js";
+import { createNotification } from "../../lib/notifications.js";
 import { buildPaginationMetadata, type PaginatedResult } from "../../lib/organizations.js";
 import { isUniqueConstraintError } from "../../lib/prisma-errors.js";
 import { prisma } from "../../lib/prisma.js";
@@ -109,6 +111,20 @@ export async function issueCredential(
         }
       });
 
+      await tx.organizationRecipient.upsert({
+        where: {
+          organizationId_userId: {
+            organizationId,
+            userId: holder.id
+          }
+        },
+        create: {
+          organizationId,
+          userId: holder.id
+        },
+        update: {}
+      });
+
       await tx.auditLog.create({
         data: {
           actorId: issuerId,
@@ -124,6 +140,15 @@ export async function issueCredential(
             referenceNo: input.referenceNo
           }
         }
+      });
+
+      await createNotification(tx, {
+        userId: holder.id,
+        type: NotificationType.CREDENTIAL_ISSUED,
+        title: "Credential issued",
+        message: `You received a new credential: ${createdCredential.title}.`,
+        resourceType: "Credential",
+        resourceId: createdCredential.id
       });
 
       return createdCredential;
@@ -328,7 +353,7 @@ export async function revokeCredential(
         }
       });
 
-      return tx.credential.findUniqueOrThrow({
+      const revoked = await tx.credential.findUniqueOrThrow({
         where: { id: credentialId },
         include: {
           organization: {
@@ -340,6 +365,18 @@ export async function revokeCredential(
           }
         }
       });
+
+      // Only reached when the atomic claim succeeds (not already revoked).
+      await createNotification(tx, {
+        userId: revoked.holderId,
+        type: NotificationType.CREDENTIAL_REVOKED,
+        title: "Credential revoked",
+        message: `Your credential "${revoked.title}" was revoked.`,
+        resourceType: "Credential",
+        resourceId: revoked.id
+      });
+
+      return revoked;
     });
 
     return toSafeCredential(revokedCredential, revokedCredential.organization);
