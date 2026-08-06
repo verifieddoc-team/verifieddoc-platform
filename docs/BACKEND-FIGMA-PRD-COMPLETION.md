@@ -28,7 +28,7 @@
 | --- | --- | --- | --- | --- | --- |
 | Auth | Register HOLDER/VERIFIER (legacy) | `POST /auth/register` | Extend | User.fullName/phone/terms | COMPLETE |
 | Auth | Register with fullName + phone + terms | — | `POST /auth/register` | User | COMPLETE |
-| Auth | Register ORGANIZATION account | — | `POST /auth/register` accountType ORGANIZATION | User + Organization + Member | COMPLETE |
+| Auth / Org | Institution onboarding (two-step) | — | Personal `POST /auth/register` (HOLDER/VERIFIER) → email verify → `POST /organizations` | PENDING org + ORGANIZATION_ADMIN; `accountType ORGANIZATION` rejected | COMPLETE |
 | Auth | Login / refresh / logout / me | Existing | Preserve | User.status | COMPLETE |
 | Auth | Forgot password / OTP / reset | — | password-reset/* | PasswordResetChallenge | COMPLETE |
 | Auth | Profile update | — | `PATCH /auth/me` | User | COMPLETE |

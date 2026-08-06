@@ -1,6 +1,7 @@
 # Auth & Registration Alignment
 
-Canonical backend contracts for signup, email verification, login, and industry metadata.
+Canonical backend contracts for signup, email verification, login, organization application, and industry metadata.
+Treat `docs/PRD-v2-FINAL.md` as the primary product source of truth.
 Inspect web/mobile only as API consumers; this document is the source of truth for mapping.
 
 ## Compatibility: existing users and email verification
@@ -16,46 +17,126 @@ Verification status is derived from `emailVerifiedAt` only (no parallel boolean 
 
 Password-reset OTPs and signup-verification OTPs use different tables, secrets, and endpoints.
 
-## Account types
+Existing users, organizations, and memberships created through the older direct `accountType: ORGANIZATION` registration path are **retained**. That path is no longer accepted.
 
-| Mobile `selectedRoleKey` | Backend `accountType` | Result |
+## Account types (public registration)
+
+| Mobile / UI selection | Backend `accountType` | Result |
 | --- | --- | --- |
 | `holder` | `HOLDER` | Personal `PlatformRole.HOLDER` |
 | `verifier` | `VERIFIER` | Personal `PlatformRole.VERIFIER` |
-| `institution` | `ORGANIZATION` | Issuing organization + `ORGANIZATION_ADMIN` membership; user platform role remains `HOLDER` |
+| `institution` | **Do not send `ORGANIZATION`** | Register as personal `HOLDER`, verify email, then `POST /organizations` |
 
-Field mapping:
+Canonical Holder and Verifier payloads use **identical personal fields**:
 
-| Mobile / UI | Backend |
-| --- | --- |
-| `workEmail` | `email` |
-| `industry` | `industry` (singular; prefer stable code) |
-| `hrContact` as name string | Prefer `hrContact: { fullName, email, phone? }` (email string alias still accepted temporarily) |
+```json
+{
+  "accountType": "HOLDER",
+  "fullName": "Jane User",
+  "email": "jane@example.com",
+  "phone": "+237670000001",
+  "password": "SecurePassword1!",
+  "confirmPassword": "SecurePassword1!",
+  "acceptedTerms": true
+}
+```
 
-Do **not** send permanent duplicate field names such as both `email` and `workEmail` to the API.
-Keep the API canonical and strict; clients own the mapping.
+Verifier differs only by `"accountType": "VERIFIER"`.
 
-Legacy firstName/lastName registration remains temporarily supported.
+Rejected on personal registration:
 
-## Product decision: Verifier registration
+- `companyName`, `industry`, `country`, `hrContact`, `hrcontact`
+- `PLATFORM_ADMIN`
+- Client-selected organization membership roles
 
-Approved PRD (`docs/PRD-v2-FINAL.md`) defines:
+Sending:
 
-- **HOLDER** — personal credential wallet account.
-- **VERIFIER** — personal platform account for verification workflows.
-- **Issuing organization** — separate tenant with membership roles (`ORGANIZATION_ADMIN` / `ORGANIZATION_ISSUER`).
+```json
+{ "accountType": "ORGANIZATION" }
+```
 
-The mobile signup screen currently presents organization-style fields for both Verifier and Institution.
-The backend **does not** create an issuing `Organization` for `accountType: VERIFIER`.
+returns **HTTP 400**:
 
-**Decision (this branch):**
+```json
+{
+  "error": {
+    "code": "ORGANIZATION_APPLICATION_REQUIRED",
+    "message": "Register a personal Holder or Verifier account, verify the email, then submit an organization application."
+  }
+}
+```
 
-- `HOLDER` is a personal account.
-- `VERIFIER` is a personal platform account unless a future approved PRD explicitly defines a verifier-company profile.
-- `ORGANIZATION` is the issuing-institution path (Organization row + `ORGANIZATION_ADMIN` membership).
+No User, Organization, or membership is created from that rejected request.
 
-A dedicated `VerifierProfile` model was **not** added: the PRD does not clearly require companyName/industry for Verifier registration as an issuing institution.
-If product later requires verifier-company metadata, add `VerifierProfile` rather than reusing the issuing Organization model.
+Legacy firstName/lastName registration remains temporarily supported for HOLDER/VERIFIER only.
+
+## Institution (issuing organization) two-step flow
+
+Institution selection on the first screen is a **UI navigation choice**, not a database `PlatformRole`.
+
+### Step 1 — Personal registration
+
+`POST /auth/register`
+
+```json
+{
+  "accountType": "HOLDER",
+  "fullName": "...",
+  "email": "...",
+  "phone": "...",
+  "password": "...",
+  "confirmPassword": "...",
+  "acceptedTerms": true
+}
+```
+
+A Verifier may also apply for an organization after personal signup; the applicant `PlatformRole` stays `HOLDER` or `VERIFIER`.
+
+### Step 2 — Verify signup OTP
+
+`POST /auth/email-verification/verify` with `{ requestId, otp }`.
+
+### Step 3 — Use the returned access token
+
+### Step 4 — Submit organization application
+
+`POST /organizations` (Bearer)
+
+```json
+{
+  "name": "...",
+  "slug": "...",
+  "contactEmail": "...",
+  "country": "...",
+  "industry": "...",
+  "hrContactName": "..."
+}
+```
+
+PRD-required: `name`, `slug`, `contactEmail`, `country`.
+Optional: `registrationNumber`, `website`, `description`, `industry`, `hrContactName`.
+
+Do **not** require `hrContactEmail`, `hrContactPhone`, or an `hrContact` object on create.
+When `industry` / `hrContactName` are supplied, store them; keep HR email/phone null unless later set via `PATCH /organizations/:organizationId`.
+
+### Step 5 — Show organization status `PENDING`
+
+Creation + applicant `ORGANIZATION_ADMIN` membership are atomic.
+
+### Step 6 — Platform Admin approves or rejects the organization
+
+Issuing-organization approval is separate from personal signup.
+
+## Product decisions (confirmed)
+
+- Public account registration creates only **HOLDER** or **VERIFIER**.
+- **VERIFIER** is a personal platform role.
+- An issuing organization is **not** a public auth account type.
+- Platform Admin approves/rejects **issuing organizations**, not each individual credential verification.
+- Public verification through a valid holder-approved share token or QR is **immediate** and does not require an Admin decision.
+- Trust comes from the verified issuer, immutable credential record, current credential status, holder disclosure controls, and secure token — not from requiring Verifier company registration.
+
+A dedicated `VerifierProfile` model was **not** added.
 
 ## Login role cards
 
@@ -99,7 +180,7 @@ Retry rules:
 { "requestId": "opaque-id", "otp": "123456" }
 ```
 
-Success **200** → `AuthSession` (`user`, `accessToken`, `refreshToken`, optional `organization`).
+Success **200** → `AuthSession` (`user`, `accessToken`, `refreshToken`, optional `organization` when the user already has `ORGANIZATION_ADMIN` membership).
 
 ### Resend
 
@@ -109,60 +190,29 @@ Success **200** → `AuthSession` (`user`, `accessToken`, `refreshToken`, option
 { "email": "jane@example.com" }
 ```
 
-**202** generic shape for unknown/verified/suspended where practical:
-
-```json
-{
-  "verificationRequestId": "opaque-id",
-  "expiresInSeconds": 600,
-  "resendAvailableInSeconds": 60
-}
-```
+**202** generic shape for unknown/verified/suspended where practical.
 
 No public `/email-verification/status` endpoint (avoids unnecessary account enumeration).
 Mobile countdown should use `expiresInSeconds` / `resendAvailableInSeconds` from register/resend.
 
 ## Login unverified gate
 
-After valid credentials, unverified users receive **403**:
-
-```json
-{
-  "error": {
-    "code": "EMAIL_NOT_VERIFIED",
-    "message": "Email verification is required",
-    "details": {
-      "verificationRequired": true,
-      "email": "user@example.com",
-      "maskedEmail": "u***@example.com"
-    }
-  }
-}
-```
+After valid credentials, unverified users receive **403** `EMAIL_NOT_VERIFIED`.
 
 ## Industries
 
-`GET /api/v1/meta/industries` (public):
+`GET /api/v1/meta/industries` (public) remains the dropdown source for optional organization-application `industry`.
 
-```json
-{
-  "industries": [
-    { "code": "HR_RECRUITMENT", "label": "HR & Recruitment" }
-  ]
-}
-```
-
-Approved list matches mobile design (no `OTHER` option).
-
-Organization registration accepts:
+Organization application accepts:
 
 1. Stable industry **code** (preferred), or
 2. Exact approved **label** (temporary compatibility),
 
 and stores the normalized **code** when recognized.
-Unrecognized free-form values are accepted temporarily for backward compatibility and stored trimmed as-is.
+Unrecognized free-form values are accepted temporarily and stored trimmed as-is.
 
-Registration uses singular `industry`, not an `industries` array.
+Uses singular `industry`, not an `industries` array.
+Do **not** send `industry` on Verifier (or Holder) registration.
 
 ## Environment
 
@@ -179,9 +229,10 @@ Production fails safely with `503 SERVICE_UNAVAILABLE` when verification is enab
 
 ## Message for frontend / mobile teams
 
-1. After register, navigate to verify-email with `verificationRequestId`, masked email, and countdown from `expiresInSeconds` / `resendAvailableInSeconds`.
-2. Call `POST /auth/email-verification/verify` and `POST /auth/email-verification/resend` — do not only `console.log` and navigate.
-3. Map `holder|verifier|institution` → `accountType` as above; send `email` not `workEmail`.
-4. Prefer industry **codes** from `GET /meta/industries`.
-5. Login: send only email/password; route by `user.role` + memberships.
-6. Do not treat login role cards as authorization.
+1. Public signup creates only personal `HOLDER` or `VERIFIER` accounts with the same fields.
+2. Do **not** send `accountType: ORGANIZATION`. Institution flow is personal register → verify OTP → `POST /organizations`.
+3. Institution selection on the first screen is not a database `PlatformRole`.
+4. Optional org metadata: `industry` (from `GET /meta/industries`) and `hrContactName` on `POST /organizations` only.
+5. After register, navigate to verify-email with `verificationRequestId`, masked email, and countdown from `expiresInSeconds` / `resendAvailableInSeconds`.
+6. Login: send only email/password; route by `user.role` + memberships.
+7. Public share-token verification remains immediate; Platform Admin does not approve each verification.

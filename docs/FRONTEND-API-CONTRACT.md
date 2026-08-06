@@ -56,7 +56,9 @@ Common errors: `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404
 - **Method / path:** `POST /auth/register`
 - **Role:** Public
 - **Headers:** `Content-Type: application/json`
-- **Request (canonical):** prefer `accountType` + `fullName` / `phone` / `acceptedTerms` (see OpenAPI). Legacy firstName/lastName still accepted temporarily.
+- **Request (canonical):** `accountType` `HOLDER` | `VERIFIER` with identical personal fields (`fullName`, `email`, `phone`, `password`, `confirmPassword`, `acceptedTerms`). Legacy firstName/lastName still accepted temporarily for personal accounts only.
+- Do **not** send `accountType: ORGANIZATION` — that returns `400 ORGANIZATION_APPLICATION_REQUIRED` and creates no records. Institution onboarding is personal register → email verify → `POST /organizations`.
+- Rejected on personal registration: `companyName`, `industry`, `country`, `hrContact` / `hrcontact`, `PLATFORM_ADMIN`.
 - **Success `201` (email verification enabled — default):** pending verification (no tokens):
 
 ```json
@@ -73,10 +75,10 @@ Common errors: `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404
 Then call `POST /auth/email-verification/verify` with `{ requestId, otp }` to obtain `AuthSession`.
 Resend via `POST /auth/email-verification/resend` with `{ email }`.
 
-See `docs/AUTH-REGISTRATION-ALIGNMENT.md` for mobile field mapping and Verifier vs Organization rules.
+See `docs/AUTH-REGISTRATION-ALIGNMENT.md` for the institution two-step flow and verification security rules.
 
-- **Errors:** `400`, `409` (`EMAIL_ALREADY_EXISTS` | `EMAIL_VERIFICATION_REQUIRED`), `429`, `503`
-- **Industries:** `GET /meta/industries` (public) for organization registration codes/labels.
+- **Errors:** `400` (`VALIDATION_ERROR` | `ORGANIZATION_APPLICATION_REQUIRED`), `409` (`EMAIL_ALREADY_EXISTS` | `EMAIL_VERIFICATION_REQUIRED`), `429`, `503`
+- **Industries:** `GET /meta/industries` (public) for optional organization-application `industry` codes/labels.
 
 ### Login — Auth
 
@@ -241,6 +243,7 @@ Do not invent extra fields (pending verifications, shared-this-month, fabricated
 
 - **Errors:** generic unavailable for invalid/expired/revoked/exhausted tokens (do not leak reason codes to UI beyond safe messaging)
 - **Usage:** `await api.verifyCredential(token)`
+- **Security:** Public verification with a valid holder-approved share token is immediate. Platform Admin does **not** approve each verification. Admin monitors platform activity and approves issuing organizations separately.
 
 There is **no** `POST /verifier/verify` and **no** `/verifier/me/dashboard` in the current API.
 
@@ -251,9 +254,13 @@ There is **no** `POST /verifier/verify` and **no** `/verifier/me/dashboard` in t
 ### Apply
 
 - **Method / path:** `POST /organizations`
-- **Role:** Any authenticated user
-- **Request:** `{ name, slug, contactEmail, country, registrationNumber?, website?, description? }`
-- **Success `201`:** `{ organization, membershipRole: "ORGANIZATION_ADMIN" }`
+- **Role:** Authenticated email-verified personal user (`HOLDER` or `VERIFIER`)
+- **Required:** `{ name, slug, contactEmail, country }`
+- **Optional:** `registrationNumber`, `website`, `description`, `industry`, `hrContactName`
+- Do **not** require `hrContactEmail`, `hrContactPhone`, or an `hrContact` object on create.
+- **Success `201`:** `{ organization, membershipRole: "ORGANIZATION_ADMIN" }` with `organization.status: "PENDING"`
+- Applicant `PlatformRole` remains unchanged; org creation + membership are atomic.
+- Platform Admin later approves or rejects the organization (separate from personal signup).
 - **Usage:** `await api.createOrganization(accessToken, input)`
 
 ### List my organizations
