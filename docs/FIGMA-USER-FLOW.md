@@ -7,7 +7,6 @@
 
 ## How this flow was produced
 
-Cursor could not authenticate directly to Figma. This flow was produced from a separately verified Figma screen inventory supplied during review. The Figma file contains the relevant screens but has no configured prototype interaction links.
 
 Navigation below was **logically derived** from that screen inventory: navigation labels, dashboard cards, tables, buttons, statuses, and result screens — not from Figma prototype edges. Admin dashboard node referenced: `862:1023`.
 
