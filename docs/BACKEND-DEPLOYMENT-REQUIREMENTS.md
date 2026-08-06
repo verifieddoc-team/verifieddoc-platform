@@ -60,10 +60,29 @@ Without Resend + `MAIL_FROM`, password-reset and signup-verification OTP deliver
 | --- | --- |
 | `DOCUMENT_UPLOADS_ENABLED` | `true` \| `false` — gates upload features |
 | `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key for signed upload/download URLs |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key for signed upload/download URLs (backend-only) |
 | `SUPABASE_STORAGE_BUCKET` | Storage bucket name for documents/artifacts |
 
 **Do not use Railway ephemeral filesystem for uploaded files.** Persist objects in Supabase (or equivalent object storage) via signed URLs.
+
+Supabase **signed upload** URLs are fixed at **two hours** by the provider. The API requests them with an empty JSON body (`{}`) and extracts the token from the returned URL query string. Keep the service-role key backend-only; never log signed URLs, tokens, or Authorization headers.
+
+Safe diagnostics (no secrets printed; signed URLs/tokens never printed):
+
+```bash
+npm run diagnostics:storage --workspace=@verifieddoc/api
+```
+
+## Email diagnostics (Resend)
+
+Safe configuration/delivery check:
+
+```bash
+npm run diagnostics:email --workspace=@verifieddoc/api
+DIAGNOSTIC_EMAIL_TO=you@example.com npm run diagnostics:email --workspace=@verifieddoc/api
+```
+
+Do not use `onboarding@resend.dev` as `MAIL_FROM` in production. Delivery failures are logged with sanitized Resend status/code/message, masked recipient, and sender domain only — never OTP or API keys.
 
 ## Fraud detection (optional)
 
@@ -93,10 +112,11 @@ Resend + Supabase are required for **full** production feature coverage. Core au
 
 1. Set explicit production secrets for JWT, database, CORS, `PUBLIC_WEB_URL`, `PASSWORD_RESET_SECRET` (when reset is enabled), and `EMAIL_VERIFICATION_SECRET` (when verification is enabled). Keep those secrets distinct.
 2. Apply migrations with `prisma migrate deploy` (includes signup email-verification backfill).
-3. Configure Resend for signup verification and password reset.
-4. Configure Supabase storage for document/artifact uploads; keep `DOCUMENT_UPLOADS_ENABLED=false` until storage is ready.
-5. Optionally tune `FRAUD_HIGH_RISK_INVALID_THRESHOLD`.
-6. Verify `/api/v1/health` and `/api/v1/ready` after deploy.
+3. Configure Resend for signup verification and password reset (`MAIL_FROM` on a verified domain; not `onboarding@resend.dev`).
+4. Configure Supabase storage for document/artifact uploads; keep `DOCUMENT_UPLOADS_ENABLED=false` until storage is ready. Confirm the bucket exists and the service-role key matches the project.
+5. Run `npm run diagnostics:storage --workspace=@verifieddoc/api` and optionally `DIAGNOSTIC_EMAIL_TO=… npm run diagnostics:email --workspace=@verifieddoc/api` before enabling features.
+6. Optionally tune `FRAUD_HIGH_RISK_INVALID_THRESHOLD`.
+7. Verify `/api/v1/health` and `/api/v1/ready` after deploy.
 
 ## Password-reset request contract
 

@@ -10,6 +10,7 @@ export type {
   CreateSignedUploadUrlResult,
   StorageService
 } from "./types.js";
+export { SUPABASE_SIGNED_UPLOAD_TTL_SECONDS } from "./types.js";
 export { clearMemoryStorage, getMemoryStorageAdapter };
 export { isSupabaseStorageConfigured };
 
