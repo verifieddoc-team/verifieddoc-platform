@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { JWT_AUDIENCE, JWT_ISSUER } from "../src/lib/tokens.js";
+import { getTestOtpForRequest } from "../src/services/email/index.js";
 import {
   cleanupTestUsers,
   createRegisterPayload,
@@ -13,6 +14,23 @@ import {
 } from "./helpers/testData.js";
 
 const app = createApp();
+
+async function registerAndVerify(appInstance: typeof app, payload: Record<string, unknown>) {
+  const registerResponse = await request(appInstance).post("/api/v1/auth/register").send(payload);
+  if (registerResponse.status !== 201) {
+    return { registerResponse, verifyResponse: registerResponse };
+  }
+  if (!registerResponse.body.verificationRequired) {
+    return { registerResponse, verifyResponse: registerResponse };
+  }
+  const requestId = registerResponse.body.verificationRequestId as string;
+  const otp = getTestOtpForRequest(requestId);
+  const verifyResponse = await request(appInstance)
+    .post("/api/v1/auth/email-verification/verify")
+    .send({ requestId, otp });
+  return { registerResponse, verifyResponse };
+}
+
 
 describe("Authentication", () => {
   beforeAll(async () => {
@@ -30,17 +48,19 @@ describe("Authentication", () => {
   it("registers and logs in successfully", async () => {
     const payload = createRegisterPayload({ firstName: "Jane", lastName: "Holder", role: "VERIFIER" });
 
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const { registerResponse, verifyResponse } = await registerAndVerify(app, payload);
     expect(registerResponse.status).toBe(201);
-    expect(registerResponse.body.user).toMatchObject({
+    expect(registerResponse.body.verificationRequired).toBe(true);
+    expect(verifyResponse.status).toBe(200);
+    expect(verifyResponse.body.user).toMatchObject({
       email: payload.email,
       firstName: "Jane",
       lastName: "Holder",
       role: "VERIFIER"
     });
-    expect(registerResponse.body.user).not.toHaveProperty("passwordHash");
-    expect(registerResponse.body.accessToken).toEqual(expect.any(String));
-    expect(registerResponse.body.refreshToken).toEqual(expect.any(String));
+    expect(verifyResponse.body.user).not.toHaveProperty("passwordHash");
+    expect(verifyResponse.body.accessToken).toEqual(expect.any(String));
+    expect(verifyResponse.body.refreshToken).toEqual(expect.any(String));
 
     const loginResponse = await request(app)
       .post("/api/v1/auth/login")
@@ -61,7 +81,7 @@ describe("Authentication", () => {
     const duplicateResponse = await request(app).post("/api/v1/auth/register").send(payload);
     expect(duplicateResponse.status).toBe(409);
     expect(duplicateResponse.body.error).toMatchObject({
-      code: "EMAIL_ALREADY_EXISTS"
+      code: "EMAIL_VERIFICATION_REQUIRED"
     });
   });
 
@@ -95,7 +115,7 @@ describe("Authentication", () => {
     });
 
     const payload = createRegisterPayload();
-    await request(app).post("/api/v1/auth/register").send(payload);
+    await registerAndVerify(app, payload);
 
     const wrongPasswordResponse = await request(app)
       .post("/api/v1/auth/login")
@@ -110,11 +130,11 @@ describe("Authentication", () => {
 
   it("returns the authenticated profile from GET /me", async () => {
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const { verifyResponse } = await registerAndVerify(app, payload);
 
     const meResponse = await request(app)
       .get("/api/v1/auth/me")
-      .set("Authorization", `Bearer ${registerResponse.body.accessToken}`);
+      .set("Authorization", `Bearer ${verifyResponse.body.accessToken}`);
 
     expect(meResponse.status).toBe(200);
     expect(meResponse.body.user).toMatchObject({
@@ -133,8 +153,8 @@ describe("Authentication", () => {
   });
 
   it("rotates refresh tokens on /refresh", async () => {
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(createRegisterPayload());
-    const originalRefreshToken = registerResponse.body.refreshToken as string;
+    const { verifyResponse } = await registerAndVerify(app, createRegisterPayload());
+    const originalRefreshToken = verifyResponse.body.refreshToken as string;
 
     const refreshResponse = await request(app)
       .post("/api/v1/auth/refresh")
@@ -152,8 +172,8 @@ describe("Authentication", () => {
   });
 
   it("revokes refresh tokens on logout", async () => {
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(createRegisterPayload());
-    const refreshToken = registerResponse.body.refreshToken as string;
+    const { verifyResponse } = await registerAndVerify(app, createRegisterPayload());
+    const refreshToken = verifyResponse.body.refreshToken as string;
 
     const logoutResponse = await request(app).post("/api/v1/auth/logout").send({ refreshToken });
     expect(logoutResponse.status).toBe(204);
@@ -164,8 +184,8 @@ describe("Authentication", () => {
   });
 
   it("revokes the refresh-token family when a revoked token is reused", async () => {
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(createRegisterPayload());
-    const firstRefreshToken = registerResponse.body.refreshToken as string;
+    const { verifyResponse } = await registerAndVerify(app, createRegisterPayload());
+    const firstRefreshToken = verifyResponse.body.refreshToken as string;
 
     const rotatedResponse = await request(app)
       .post("/api/v1/auth/refresh")
@@ -189,8 +209,8 @@ describe("Authentication", () => {
   });
 
   it("allows only one concurrent refresh rotation and revokes the token family", async () => {
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(createRegisterPayload());
-    const refreshToken = registerResponse.body.refreshToken as string;
+    const { verifyResponse } = await registerAndVerify(app, createRegisterPayload());
+    const refreshToken = verifyResponse.body.refreshToken as string;
 
     const [firstResponse, secondResponse] = await Promise.all([
       request(app).post("/api/v1/auth/refresh").send({ refreshToken }),
@@ -237,18 +257,18 @@ describe("Authentication", () => {
     expect(statuses.every((status) => status !== 500)).toBe(true);
 
     const conflictResponse = firstResponse.status === 409 ? firstResponse : secondResponse;
-    expect(conflictResponse.body.error).toMatchObject({
-      code: "EMAIL_ALREADY_EXISTS"
-    });
+    expect(["EMAIL_ALREADY_EXISTS", "EMAIL_VERIFICATION_REQUIRED"]).toContain(
+      conflictResponse.body.error.code
+    );
   });
 
   it("rejects access tokens with invalid issuer or audience", async () => {
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const { verifyResponse } = await registerAndVerify(app, payload);
     const tokenPayload = {
-      sub: registerResponse.body.user.id as string,
+      sub: verifyResponse.body.user.id as string,
       email: payload.email,
-      role: registerResponse.body.user.role as string
+      role: verifyResponse.body.user.role as string
     };
 
     const invalidIssuerToken = jwt.sign(tokenPayload, env.JWT_ACCESS_SECRET, {

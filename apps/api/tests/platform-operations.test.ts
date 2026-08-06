@@ -29,6 +29,8 @@ const productionEnvBase = {
   NODE_ENV: "production" as const,
   JWT_ACCESS_SECRET: "production-access-secret-with-32-characters",
   JWT_REFRESH_SECRET: "production-refresh-secret-with-32-characters",
+  PASSWORD_RESET_SECRET: "production-password-reset-secret-32chars!",
+  EMAIL_VERIFICATION_SECRET: "production-email-verification-secret-32!",
   DATABASE_URL: "postgresql://verifieddoc:verifieddoc@db.example.test:5432/verifieddoc",
   CORS_ORIGINS: "https://app.example.test",
   PUBLIC_WEB_URL: "https://app.example.test"
@@ -250,6 +252,15 @@ describe("Platform operations and audit access", () => {
         demoPassword: "TestPass1!"
       })
     ).toBe("TestPass1!");
+  });
+
+  it("rejects EMAIL_VERIFICATION_SECRET equal to JWT or password-reset secrets", () => {
+    expect(() =>
+      createEnvSchema().parse({
+        ...productionEnvBase,
+        EMAIL_VERIFICATION_SECRET: productionEnvBase.JWT_ACCESS_SECRET
+      })
+    ).toThrow(/EMAIL_VERIFICATION_SECRET/i);
   });
 
   it("rejects default JWT secrets and wildcard CORS in production", () => {

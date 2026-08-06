@@ -19,6 +19,21 @@ import {
 const app = createApp();
 const NEW_PASSWORD = "BrandNewPass9!";
 
+async function registerAndVerify(payload: Record<string, unknown>) {
+  const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+  expect(registerResponse.status).toBe(201);
+  if (!registerResponse.body.verificationRequired) {
+    return registerResponse;
+  }
+  const requestId = registerResponse.body.verificationRequestId as string;
+  const otp = getTestOtpForRequest(requestId);
+  const verifyResponse = await request(app)
+    .post("/api/v1/auth/email-verification/verify")
+    .send({ requestId, otp });
+  expect(verifyResponse.status).toBe(200);
+  return verifyResponse;
+}
+
 describe("Password reset", () => {
   beforeAll(async () => {
     await cleanupTestData();
@@ -39,7 +54,8 @@ describe("Password reset", () => {
 
   it("returns 202 with requestId for existing and unknown emails without revealing existence", async () => {
     const payload = createRegisterPayload();
-    await request(app).post("/api/v1/auth/register").send(payload);
+    await registerAndVerify(payload);
+    clearTestEmailState();
 
     const known = await request(app)
       .post("/api/v1/auth/password-reset/request")
@@ -55,7 +71,7 @@ describe("Password reset", () => {
     expect(unknown.body).toEqual({ requestId: expect.any(String) });
     expect(known.body.requestId).not.toBe(unknown.body.requestId);
 
-    const inbox = getTestEmailInbox();
+    const inbox = getTestEmailInbox().filter((message) => message.kind === "password-reset");
     expect(inbox).toHaveLength(1);
     expect(inbox[0]?.to).toBe(payload.email);
     expect(inbox[0]?.otp).toMatch(/^\d{6}$/);
@@ -64,7 +80,7 @@ describe("Password reset", () => {
 
   it("completes OTP verify and password confirm, revoking refresh tokens", async () => {
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const registerResponse = await registerAndVerify(payload);
     const oldRefreshToken = registerResponse.body.refreshToken as string;
 
     const requestResponse = await request(app)
@@ -129,7 +145,7 @@ describe("Password reset", () => {
 
   it("locks the challenge after five invalid OTP attempts", async () => {
     const payload = createRegisterPayload();
-    await request(app).post("/api/v1/auth/register").send(payload);
+    await registerAndVerify(payload);
 
     const requestResponse = await request(app)
       .post("/api/v1/auth/password-reset/request")
@@ -162,7 +178,7 @@ describe("Password reset", () => {
 
   it("rejects expired OTP challenges", async () => {
     const payload = createRegisterPayload();
-    const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+    const registerResponse = await registerAndVerify(payload);
 
     const requestResponse = await request(app)
       .post("/api/v1/auth/password-reset/request")
@@ -181,12 +197,13 @@ describe("Password reset", () => {
 
     expect(verifyResponse.status).toBe(400);
     expect(verifyResponse.body.error.code).toBe("OTP_EXPIRED");
-    expect(registerResponse.status).toBe(201);
+    expect(registerResponse.status).toBe(200);
+    expect(registerResponse.body.accessToken).toEqual(expect.any(String));
   });
 
   it("invalidates prior active challenges when a new reset is requested", async () => {
     const payload = createRegisterPayload();
-    await request(app).post("/api/v1/auth/register").send(payload);
+    await registerAndVerify(payload);
 
     const first = await request(app)
       .post("/api/v1/auth/password-reset/request")
@@ -217,7 +234,7 @@ describe("Password reset", () => {
 
   it("rejects reuse of a consumed reset token", async () => {
     const payload = createRegisterPayload();
-    await request(app).post("/api/v1/auth/register").send(payload);
+    await registerAndVerify(payload);
 
     const requestResponse = await request(app)
       .post("/api/v1/auth/password-reset/request")
