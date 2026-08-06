@@ -47,6 +47,133 @@ describe("Organization onboarding and membership", () => {
     expect(response.body.organization).not.toHaveProperty("passwordHash");
   });
 
+  it("allows a verified verifier to submit an organization application without changing PlatformRole", async () => {
+    const applicant = await registerAndAuthenticate(app, { role: "VERIFIER" });
+    const { response } = await applyForOrganization(app, applicant.accessToken, {
+      name: "Verifier Institution",
+      slug: `${TEST_ORG_SLUG_PREFIX}-verifier-${randomUUID().slice(0, 8)}`
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.organization.status).toBe("PENDING");
+    expect(response.body.membershipRole).toBe("ORGANIZATION_ADMIN");
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: applicant.user.id } });
+    expect(user.role).toBe(PlatformRole.VERIFIER);
+  });
+
+  it("requires name, slug, contactEmail, and country for organization application", async () => {
+    const applicant = await registerAndAuthenticate(app);
+    const auth = { Authorization: `Bearer ${applicant.accessToken}` };
+
+    const missingCountry = await request(app)
+      .post("/api/v1/organizations")
+      .set(auth)
+      .send({
+        name: "Missing Country",
+        slug: `${TEST_ORG_SLUG_PREFIX}-missing-country-${randomUUID().slice(0, 8)}`,
+        contactEmail: "admin@example.com"
+      });
+    expect(missingCountry.status).toBe(400);
+
+    const missingContact = await request(app)
+      .post("/api/v1/organizations")
+      .set(auth)
+      .send({
+        name: "Missing Contact",
+        slug: `${TEST_ORG_SLUG_PREFIX}-missing-contact-${randomUUID().slice(0, 8)}`,
+        country: "Cameroon"
+      });
+    expect(missingContact.status).toBe(400);
+
+    const missingName = await request(app)
+      .post("/api/v1/organizations")
+      .set(auth)
+      .send({
+        slug: `${TEST_ORG_SLUG_PREFIX}-missing-name-${randomUUID().slice(0, 8)}`,
+        contactEmail: "admin@example.com",
+        country: "Cameroon"
+      });
+    expect(missingName.status).toBe(400);
+
+    const missingSlug = await request(app)
+      .post("/api/v1/organizations")
+      .set(auth)
+      .send({
+        name: "MissingSlug",
+        contactEmail: "admin@example.com",
+        country: "Cameroon"
+      });
+    expect(missingSlug.status).toBe(400);
+  });
+
+  it("succeeds without industry or HR contact data and accepts optional Figma metadata", async () => {
+    const withoutMeta = await registerAndAuthenticate(app);
+    const bare = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${withoutMeta.accessToken}`)
+      .send({
+        name: "Bare Institution",
+        slug: `${TEST_ORG_SLUG_PREFIX}-bare-${randomUUID().slice(0, 8)}`,
+        contactEmail: "admin@bare.example.com",
+        country: "Cameroon"
+      });
+
+    expect(bare.status).toBe(201);
+    expect(bare.body.organization.industry).toBeNull();
+    expect(bare.body.organization.hrContactName).toBeNull();
+    expect(bare.body.organization.hrContactEmail).toBeNull();
+    expect(bare.body.organization.hrContactPhone).toBeNull();
+
+    const withMeta = await registerAndAuthenticate(app);
+    const rich = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${withMeta.accessToken}`)
+      .send({
+        name: "Rich Institution",
+        slug: `${TEST_ORG_SLUG_PREFIX}-rich-${randomUUID().slice(0, 8)}`,
+        contactEmail: "admin@rich.example.com",
+        country: "Cameroon",
+        industry: "Education",
+        hrContactName: "Mary Human"
+      });
+
+    expect(rich.status).toBe(201);
+    expect(rich.body.organization.industry).toBe("EDUCATION");
+    expect(rich.body.organization.hrContactName).toBe("Mary Human");
+    expect(rich.body.organization.hrContactEmail).toBeNull();
+    expect(rich.body.organization.hrContactPhone).toBeNull();
+  });
+
+  it("creates organization and ORGANIZATION_ADMIN membership atomically", async () => {
+    const applicant = await registerAndAuthenticate(app);
+    const slug = `${TEST_ORG_SLUG_PREFIX}-atomic-${randomUUID().slice(0, 8)}`;
+    const beforeOrgs = await prisma.organization.count({ where: { slug } });
+    const beforeMembers = await prisma.organizationMember.count({ where: { userId: applicant.user.id } });
+
+    const response = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${applicant.accessToken}`)
+      .send({
+        name: "Atomic Org",
+        slug,
+        contactEmail: "atomic@example.com",
+        country: "Cameroon"
+      });
+
+    expect(response.status).toBe(201);
+    expect(await prisma.organization.count({ where: { slug } })).toBe(beforeOrgs + 1);
+    expect(await prisma.organizationMember.count({ where: { userId: applicant.user.id } })).toBe(
+      beforeMembers + 1
+    );
+
+    const membership = await prisma.organizationMember.findFirstOrThrow({
+      where: { userId: applicant.user.id, organization: { slug } }
+    });
+    expect(membership.role).toBe(OrganizationRole.ORGANIZATION_ADMIN);
+    expect(membership.organizationId).toBe(response.body.organization.id);
+  });
+
   it("rejects unauthenticated organization applications", async () => {
     const response = await request(app).post("/api/v1/organizations").send(createOrganizationPayload());
 

@@ -1,9 +1,8 @@
 import { PlatformRole } from "@prisma/client";
 import { z } from "zod";
-import { normalizeIndustryInput } from "../../lib/industries.js";
 import { passwordPolicySchema } from "../../lib/password-policy.js";
 
-export const registrationAccountTypeSchema = z.enum(["HOLDER", "VERIFIER", "ORGANIZATION"]);
+export const registrationAccountTypeSchema = z.enum(["HOLDER", "VERIFIER"]);
 export type RegistrationAccountType = z.infer<typeof registrationAccountTypeSchema>;
 
 const publicRegistrationRoleSchema = z.enum([PlatformRole.HOLDER, PlatformRole.VERIFIER]);
@@ -15,23 +14,6 @@ const fullNameSchema = z
   .pipe(z.string().min(2).max(200));
 
 const phoneSchema = z.string().trim().min(3).max(32);
-
-const hrContactObjectSchema = z
-  .object({
-    fullName: z.string().trim().min(1).max(200).optional(),
-    email: z.string().email().max(320).transform((value) => value.toLowerCase()),
-    phone: phoneSchema.optional()
-  })
-  .strict();
-
-function normalizeHrContact(raw: unknown): z.infer<typeof hrContactObjectSchema> {
-  if (typeof raw === "string") {
-    const email = z.string().email().max(320).transform((value) => value.toLowerCase()).parse(raw);
-    return { email };
-  }
-
-  return hrContactObjectSchema.parse(raw);
-}
 
 const personalCanonicalBase = {
   fullName: fullNameSchema,
@@ -63,7 +45,7 @@ function rejectCompanyFields(value: Record<string, unknown>, context: z.Refineme
     if (value[key] !== undefined) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `${key} is only allowed for ORGANIZATION registration`,
+        message: `${key} is not allowed for personal Holder or Verifier registration`,
         path: [key]
       });
     }
@@ -85,15 +67,6 @@ function requireAccountTypeRoleAgreement(
   context: z.RefinementCtx
 ) {
   if (!value.accountType || !value.role) {
-    return;
-  }
-
-  if (value.accountType === "ORGANIZATION") {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "role must not be supplied with accountType ORGANIZATION",
-      path: ["role"]
-    });
     return;
   }
 
@@ -132,64 +105,6 @@ const verifierCanonicalSchema = z
     rejectCompanyFields(value as Record<string, unknown>, context);
   });
 
-const organizationCanonicalSchema = z
-  .object({
-    accountType: z.literal("ORGANIZATION"),
-    ...personalCanonicalBase,
-    companyName: z.string().trim().min(2).max(200),
-    industry: z
-      .string()
-      .trim()
-      .min(2)
-      .max(100)
-      .transform((value) => normalizeIndustryInput(value)),
-    country: z.string().trim().min(2).max(100),
-    hrContact: z.unknown().optional(),
-    hrcontact: z.unknown().optional()
-  })
-  .strict()
-  .superRefine((value, context) => {
-    requirePasswordMatch(value, context);
-
-    if (value.hrContact !== undefined && value.hrcontact !== undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Provide only one of hrContact or deprecated hrcontact",
-        path: ["hrContact"]
-      });
-      return;
-    }
-
-    const rawHr = value.hrContact ?? value.hrcontact;
-    if (rawHr === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "hrContact is required for ORGANIZATION registration",
-        path: ["hrContact"]
-      });
-      return;
-    }
-
-    try {
-      normalizeHrContact(rawHr);
-    } catch {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "hrContact must be a valid email string or object with email",
-        path: ["hrContact"]
-      });
-    }
-  })
-  .transform((value) => {
-    const rawHr = value.hrContact ?? value.hrcontact;
-    const hrContact = normalizeHrContact(rawHr);
-    const { hrcontact: _deprecated, ...rest } = value;
-    return {
-      ...rest,
-      hrContact
-    };
-  });
-
 const legacyRegisterSchema = z
   .object({
     ...legacyBase
@@ -202,14 +117,14 @@ const legacyRegisterSchema = z
 export const registerSchema = z.union([
   holderCanonicalSchema,
   verifierCanonicalSchema,
-  organizationCanonicalSchema,
   legacyRegisterSchema
 ]);
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 
-export type CanonicalPersonalRegisterInput = z.infer<typeof holderCanonicalSchema> | z.infer<typeof verifierCanonicalSchema>;
-export type CanonicalOrganizationRegisterInput = z.infer<typeof organizationCanonicalSchema>;
+export type CanonicalPersonalRegisterInput =
+  | z.infer<typeof holderCanonicalSchema>
+  | z.infer<typeof verifierCanonicalSchema>;
 export type LegacyRegisterInput = z.infer<typeof legacyRegisterSchema>;
 
 export const loginSchema = z

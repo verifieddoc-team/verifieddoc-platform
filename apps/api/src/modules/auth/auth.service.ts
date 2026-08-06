@@ -8,7 +8,6 @@ import { joinNames, splitFullName } from "../../lib/names.js";
 import { normalizePhoneE164 } from "../../lib/phone.js";
 import { isUniqueConstraintError } from "../../lib/prisma-errors.js";
 import { prisma } from "../../lib/prisma.js";
-import { slugifyOrganizationName, withSlugSuffix } from "../../lib/slugify.js";
 import {
   createAccessToken,
   generateRefreshToken,
@@ -36,7 +35,6 @@ import type {
 
 const BCRYPT_ROUNDS = 12;
 const INVALID_CREDENTIALS_MESSAGE = "Invalid email or password";
-const MAX_SLUG_ATTEMPTS = 8;
 const PASSWORD_RESET_OTP_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TOKEN_TTL_SECONDS = 600;
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
@@ -203,9 +201,6 @@ function resolveRegistrationNames(input: RegisterInput) {
 
 function resolvePlatformRole(input: RegisterInput): PlatformRole {
   if ("accountType" in input) {
-    if (input.accountType === "ORGANIZATION") {
-      return PlatformRole.HOLDER;
-    }
     if (input.accountType === "VERIFIER") {
       return PlatformRole.VERIFIER;
     }
@@ -392,150 +387,6 @@ async function loadOrganizationRegistrationSummary(
   };
 }
 
-async function registerOrganizationAccount(
-  input: Extract<RegisterInput, { accountType: "ORGANIZATION" }>,
-  names: ReturnType<typeof resolveRegistrationNames>,
-  phone: string,
-  passwordHash: string,
-  context: SessionContext,
-  requireVerification: boolean
-): Promise<RegisterResult> {
-  const acceptedAt = new Date();
-  const baseSlug = slugifyOrganizationName(input.companyName);
-  const hrPhone = input.hrContact.phone ? normalizePhoneE164(input.hrContact.phone) : null;
-
-  let created:
-    | {
-        user: User;
-        organization: {
-          id: string;
-          name: string;
-          industry: string | null;
-          status: OrganizationStatus;
-        };
-      }
-    | undefined;
-
-  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt += 1) {
-    const slug = withSlugSuffix(baseSlug, attempt);
-
-    try {
-      created = await prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
-          data: {
-            email: input.email,
-            passwordHash,
-            fullName: names.fullName,
-            firstName: names.firstName,
-            lastName: names.lastName,
-            phone,
-            role: PlatformRole.HOLDER,
-            emailVerifiedAt: requireVerification ? null : acceptedAt,
-            termsAcceptedAt: acceptedAt,
-            privacyAcceptedAt: acceptedAt,
-            termsVersion: env.TERMS_VERSION,
-            privacyVersion: env.PRIVACY_VERSION
-          }
-        });
-
-        const organization = await tx.organization.create({
-          data: {
-            name: input.companyName,
-            slug,
-            contactEmail: input.hrContact.email,
-            country: input.country,
-            industry: input.industry,
-            hrContactName: input.hrContact.fullName ?? null,
-            hrContactEmail: input.hrContact.email,
-            hrContactPhone: hrPhone,
-            status: OrganizationStatus.PENDING
-          }
-        });
-
-        await tx.organizationMember.create({
-          data: {
-            organizationId: organization.id,
-            userId: user.id,
-            role: OrganizationRole.ORGANIZATION_ADMIN
-          }
-        });
-
-        await tx.auditLog.create({
-          data: {
-            actorId: user.id,
-            organizationId: organization.id,
-            action: "ORGANIZATION_REGISTERED",
-            resourceType: "Organization",
-            resourceId: organization.id,
-            ipAddress: context.ipAddress,
-            userAgent: context.userAgent,
-            details: {
-              industry: organization.industry,
-              country: input.country
-            }
-          }
-        });
-
-        await tx.auditLog.create({
-          data: {
-            actorId: user.id,
-            action: "USER_REGISTERED",
-            resourceType: "User",
-            resourceId: user.id,
-            ipAddress: context.ipAddress,
-            userAgent: context.userAgent,
-            details: {
-              accountType: "ORGANIZATION"
-            }
-          }
-        });
-
-        return { user, organization };
-      });
-      break;
-    } catch (error) {
-      if (isUniqueConstraintError(error, ["email"])) {
-        const existing = await prisma.user.findUnique({
-          where: { email: input.email },
-          select: { emailVerifiedAt: true }
-        });
-        if (existing && !existing.emailVerifiedAt && env.EMAIL_VERIFICATION_ENABLED) {
-          throwEmailVerificationRequired(input.email);
-        }
-        throw new AppError(409, "EMAIL_ALREADY_EXISTS", "An account with this email already exists");
-      }
-      if (isUniqueConstraintError(error, ["phone"])) {
-        throw new AppError(409, "PHONE_ALREADY_EXISTS", "An account with this phone number already exists");
-      }
-      if (isUniqueConstraintError(error, ["slug"])) {
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  if (!created) {
-    throw new AppError(
-      409,
-      "ORGANIZATION_SLUG_CONFLICT",
-      "Unable to allocate a unique organization slug"
-    );
-  }
-
-  if (requireVerification) {
-    return issuePendingEmailVerification(created.user, context);
-  }
-
-  const refreshToken = await createRefreshTokenRecord(created.user.id, context);
-  return buildSession(created.user, refreshToken, {
-    id: created.organization.id,
-    name: created.organization.name,
-    industry: created.organization.industry,
-    status: created.organization.status,
-    membershipRole: OrganizationRole.ORGANIZATION_ADMIN
-  });
-}
-
 export async function registerUser(
   input: RegisterInput,
   context: SessionContext = {}
@@ -564,10 +415,6 @@ export async function registerUser(
   await ensurePhoneAvailable(phone);
 
   const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
-
-  if (isCanonical && input.accountType === "ORGANIZATION") {
-    return registerOrganizationAccount(input, names, phone!, passwordHash, context, requireVerification);
-  }
 
   const acceptedAt = isCanonical ? new Date() : null;
   const verifiedAt = requireVerification ? null : new Date();

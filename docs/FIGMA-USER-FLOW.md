@@ -211,13 +211,13 @@ Flag “Verified At” column as inconsistent for Pending/Rejected rows; recomme
 
 Backend + contracts support today (canonical `/api/v1` prefix omitted below):
 
-- Auth: register (HOLDER/VERIFIER/ORGANIZATION + legacy → pending email verification), email-verification verify/resend, login (email+password only; rejects unverified), refresh, logout, me, profile patch, change password, password-reset (separate OTP table/secret)
-- Metadata: `GET /meta/industries` (public industry catalog for organization registration)
+- Auth: register (HOLDER/VERIFIER + legacy → pending email verification; `accountType: ORGANIZATION` rejected with `ORGANIZATION_APPLICATION_REQUIRED`), email-verification verify/resend, login (email+password only; rejects unverified), refresh, logout, me, profile patch, change password, password-reset (separate OTP table/secret)
+- Metadata: `GET /meta/industries` (public industry catalog for optional organization-application metadata)
 - Holder: dashboard (incl. pending/shared/activity), activity feed, verification requests, personal documents, wallet, share links
 - Verifier: dashboard, authenticated verify, history, saved orgs, verification requests, file-hash verify
-- Public verify: `GET /verify/:token` (records VerificationEvent)
-- Organizations: create/list/get/patch profile, dashboard, recipients + recipient-invitations, verification-request review, registration documents, members/invitations, credentials + artifacts, org audit logs
-- Admin: dashboard, org review, users/suspend, verifications/requests monitors, fraud alerts, reports/CSV, registration-document review, audit logs
+- Public verify: `GET /verify/:token` (immediate for valid holder-approved tokens; no Platform Admin decision per verification; records VerificationEvent)
+- Organizations: apply (`POST /organizations` after personal signup), list/get/patch profile, dashboard, recipients + recipient-invitations, verification-request review, registration documents, members/invitations, credentials + artifacts, org audit logs
+- Admin: dashboard, issuing-organization review/approve/reject, users/suspend, verifications/requests monitors, fraud alerts, reports/CSV, registration-document review, audit logs
 - Notifications: list + mark read
 
 Web live mode (`VITE_DEMO_MODE=false`) wires many of the earlier endpoints; newer Figma/PRD endpoints may still need frontend wiring. Mobile clients are largely **implemented but not wired**. Full catalog: `docs/BACKEND-ENDPOINT-CATALOG.md`.
@@ -394,9 +394,10 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  L[Register/Login] --> A[POST /organizations]
+  R[POST /auth/register HOLDER or VERIFIER] --> V[Verify email OTP]
+  V --> A[POST /organizations]
   A --> P[Pending review]
-  P --> APR[Admin APPROVE]
+  P --> APR[Admin APPROVE organization]
   APR --> W[Organization workspace]
   W --> INV[Invite members]
   W --> ISS[Issue credential]
@@ -405,6 +406,8 @@ flowchart TD
   W --> AUD[Audit logs]
   W --> VR[Verification requests - GET/PATCH org verification-requests]
 ```
+
+Institution selection on the first UI screen is navigation only — do not send `accountType: ORGANIZATION`.
 
 ---
 

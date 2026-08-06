@@ -56,7 +56,7 @@ describe("Signup email verification", () => {
     await disconnectTestDatabase();
   });
 
-  it("registers holder/verifier/organization as unverified pending verification without tokens", async () => {
+  it("registers holder and verifier as unverified pending verification without tokens", async () => {
     const holderPayload = canonicalHolder();
     const holder = await request(app).post("/api/v1/auth/register").send(holderPayload);
     expect(holder.status).toBe(201);
@@ -86,37 +86,6 @@ describe("Signup email verification", () => {
     const verifierUser = await prisma.user.findUniqueOrThrow({ where: { email: verifierPayload.email } });
     expect(verifierUser.emailVerifiedAt).toBeNull();
     expect(verifierUser.role).toBe(PlatformRole.VERIFIER);
-
-    const orgEmail = createTestEmail("ev-org");
-    const org = await request(app)
-      .post("/api/v1/auth/register")
-      .send({
-        accountType: "ORGANIZATION",
-        fullName: "Org Admin",
-        email: orgEmail,
-        phone: "+256701234567",
-        password: "SecurePassword1!",
-        confirmPassword: "SecurePassword1!",
-        companyName: "Northwind Verify Co",
-        industry: "EDUCATION",
-        country: "Uganda",
-        hrContact: { email: "hr@northwind.verify.test" },
-        acceptedTerms: true
-      });
-    expect(org.status).toBe(201);
-    expect(org.body.verificationRequired).toBe(true);
-    expect(org.body.accessToken).toBeUndefined();
-    expect(org.body.organization).toBeUndefined();
-
-    const orgUser = await prisma.user.findUniqueOrThrow({ where: { email: orgEmail } });
-    expect(orgUser.emailVerifiedAt).toBeNull();
-    const membership = await prisma.organizationMember.findFirstOrThrow({
-      where: { userId: orgUser.id },
-      include: { organization: true }
-    });
-    expect(membership.role).toBe(OrganizationRole.ORGANIZATION_ADMIN);
-    expect(membership.organization.status).toBe(OrganizationStatus.PENDING);
-    expect(membership.organization.industry).toBe("EDUCATION");
   });
 
   it("sends verification OTP through memory adapter and never stores plaintext OTP", async () => {
@@ -431,16 +400,12 @@ describe("Signup email verification", () => {
     const registerResponse = await request(app)
       .post("/api/v1/auth/register")
       .send({
-        accountType: "ORGANIZATION",
+        accountType: "HOLDER",
         fullName: "Org Person",
         email,
         phone: "+256709998877",
         password: "SecurePassword1!",
         confirmPassword: "SecurePassword1!",
-        companyName: "Membership Org",
-        industry: "HR & Recruitment",
-        country: "Uganda",
-        hrContact: { email: "hr@membership.org.test" },
         acceptedTerms: true
       });
 
@@ -451,10 +416,23 @@ describe("Signup email verification", () => {
 
     expect(verifyResponse.status).toBe(200);
     expect(verifyResponse.body.user.role).toBe("HOLDER");
-    expect(verifyResponse.body.organization).toMatchObject({
+
+    const apply = await request(app)
+      .post("/api/v1/organizations")
+      .set("Authorization", `Bearer ${verifyResponse.body.accessToken}`)
+      .send({
+        name: "Membership Org",
+        slug: `test-org-membership-${Date.now()}`,
+        contactEmail: "hr@membership.org.test",
+        country: "Uganda",
+        industry: "HR & Recruitment"
+      });
+    expect(apply.status).toBe(201);
+    expect(apply.body.membershipRole).toBe(OrganizationRole.ORGANIZATION_ADMIN);
+    expect(apply.body.organization).toMatchObject({
       name: "Membership Org",
       industry: "HR_RECRUITMENT",
-      membershipRole: OrganizationRole.ORGANIZATION_ADMIN
+      status: OrganizationStatus.PENDING
     });
 
     const login = await request(app)
@@ -462,5 +440,19 @@ describe("Signup email verification", () => {
       .send({ email, password: "SecurePassword1!" });
     expect(login.status).toBe(200);
     expect(login.body.user.role).toBe("HOLDER");
+
+    const memberships = await request(app)
+      .get("/api/v1/organizations")
+      .set("Authorization", `Bearer ${login.body.accessToken}`);
+    expect(memberships.status).toBe(200);
+    expect(memberships.body.organizations).toHaveLength(1);
+    expect(memberships.body.organizations[0]).toMatchObject({
+      membershipRole: OrganizationRole.ORGANIZATION_ADMIN,
+      organization: {
+        name: "Membership Org",
+        industry: "HR_RECRUITMENT",
+        status: OrganizationStatus.PENDING
+      }
+    });
   });
 });

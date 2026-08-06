@@ -6,7 +6,7 @@ All paths are relative to `/api/v1`. Types refer to `@verifieddoc/contracts` unl
 | --- | --- | --- | --- | --- | --- |
 | System | GET | /health | Public | — | ServiceHealth |
 | System | GET | /ready | Public | — | ServiceReadiness |
-| Authentication | POST | /auth/register | Public (rate-limited) | RegisterInput | PendingEmailVerificationRegistrationResponse 201 (or AuthSession if verification disabled) |
+| Authentication | POST | /auth/register | Public (rate-limited) | RegisterInput (HOLDER\|VERIFIER only; ORGANIZATION → 400 ORGANIZATION_APPLICATION_REQUIRED) | PendingEmailVerificationRegistrationResponse 201 (or AuthSession if verification disabled) |
 | Authentication | POST | /auth/email-verification/verify | Public (rate-limited) | VerifyEmailInput | AuthSession |
 | Authentication | POST | /auth/email-verification/resend | Public (rate-limited) | ResendEmailVerificationInput | ResendEmailVerificationResponse 202 |
 | Metadata | GET | /meta/industries | Public | — | IndustryListResponse |
@@ -48,7 +48,7 @@ All paths are relative to `/api/v1`. Types refer to `@verifieddoc/contracts` unl
 | Verifier | POST | /verifier/file-verifications/:uploadId/complete | Bearer + VERIFIER | — | VerifierVerificationResponse |
 | Organization Invitations | POST | /invitations/accept | Bearer (any) | AcceptInvitationInput | AcceptInvitationResponse |
 | Organization Recipients | POST | /recipient-invitations/accept | Bearer (email match, rate-limited) | AcceptRecipientInvitationInput | AcceptRecipientInvitationResponse |
-| Organizations | POST | /organizations | Bearer (any) | CreateOrganizationInput | OrganizationMembershipView 201 |
+| Organizations | POST | /organizations | Bearer (email-verified personal user) | CreateOrganizationInput (required: name, slug, contactEmail, country; optional: industry, hrContactName, …) | { organization, membershipRole } 201 (PENDING) |
 | Organizations | GET | /organizations | Bearer (any) | — | { organizations: OrganizationMembershipView[] } |
 | Organizations | GET | /organizations/:organizationId | Bearer (member) | — | { organization } |
 | Organizations | PATCH | /organizations/:organizationId | Bearer + ORGANIZATION_ADMIN | UpdateOrganizationInput | { organization } |

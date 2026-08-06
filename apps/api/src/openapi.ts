@@ -214,9 +214,10 @@ export const openApiDocument = {
         oneOf: [
           { $ref: "#/components/schemas/RegisterHolderRequest" },
           { $ref: "#/components/schemas/RegisterVerifierRequest" },
-          { $ref: "#/components/schemas/RegisterOrganizationRequest" },
           { $ref: "#/components/schemas/RegisterLegacyRequest" }
-        ]
+        ],
+        description:
+          "Canonical public registration accepts only HOLDER or VERIFIER with identical personal fields. Issuing organizations are onboarded via authenticated POST /organizations after email verification. Sending accountType ORGANIZATION returns ORGANIZATION_APPLICATION_REQUIRED."
       },
       RegisterHolderRequest: {
         type: "object",
@@ -231,15 +232,16 @@ export const openApiDocument = {
         ],
         properties: {
           accountType: { type: "string", enum: ["HOLDER"] },
-          fullName: { type: "string", example: "Jane Holder" },
-          email: { type: "string", format: "email", example: "jane.holder@example.test" },
-          phone: { type: "string", example: "+256700000000" },
+          fullName: { type: "string", example: "Jane User" },
+          email: { type: "string", format: "email", example: "jane@example.com" },
+          phone: { type: "string", example: "+237670000001" },
           password: { type: "string", format: "password", example: "SecurePassword1!" },
           confirmPassword: { type: "string", format: "password", example: "SecurePassword1!" },
           acceptedTerms: { type: "boolean", enum: [true] }
         },
         additionalProperties: false,
-        description: "Canonical Credential Holder registration. Do not send companyName, industry, or hrContact."
+        description:
+          "Canonical Credential Holder registration. Same personal fields as Verifier. Do not send companyName, industry, country, hrContact, or hrcontact."
       },
       RegisterVerifierRequest: {
         type: "object",
@@ -254,68 +256,16 @@ export const openApiDocument = {
         ],
         properties: {
           accountType: { type: "string", enum: ["VERIFIER"] },
-          fullName: { type: "string", example: "Victor Verifier" },
-          email: { type: "string", format: "email", example: "victor.verifier@example.test" },
-          phone: { type: "string", example: "+256700000001" },
+          fullName: { type: "string", example: "Jane User" },
+          email: { type: "string", format: "email", example: "jane@example.com" },
+          phone: { type: "string", example: "+237670000001" },
           password: { type: "string", format: "password", example: "SecurePassword1!" },
           confirmPassword: { type: "string", format: "password", example: "SecurePassword1!" },
           acceptedTerms: { type: "boolean", enum: [true] }
         },
-        additionalProperties: false
-      },
-      RegisterOrganizationRequest: {
-        type: "object",
-        required: [
-          "accountType",
-          "fullName",
-          "email",
-          "phone",
-          "password",
-          "confirmPassword",
-          "companyName",
-          "industry",
-          "hrContact",
-          "country",
-          "acceptedTerms"
-        ],
-        properties: {
-          accountType: { type: "string", enum: ["ORGANIZATION"] },
-          fullName: { type: "string", example: "Jane Smith" },
-          email: { type: "string", format: "email", example: "jane@company.com" },
-          phone: { type: "string", example: "+256700000000" },
-          password: { type: "string", format: "password", example: "SecurePassword1!" },
-          confirmPassword: { type: "string", format: "password", example: "SecurePassword1!" },
-          companyName: { type: "string", example: "Lumora Solutions" },
-          industry: {
-            type: "string",
-            example: "EDUCATION",
-            description:
-              "Prefer a stable industry code from GET /meta/industries (e.g. EDUCATION). Approved codes or exact labels are accepted and normalized to codes when recognized."
-          },
-          country: { type: "string", example: "Uganda" },
-          hrContact: {
-            oneOf: [
-              {
-                type: "object",
-                required: ["email"],
-                properties: {
-                  fullName: { type: "string", example: "Mary Human" },
-                  email: { type: "string", format: "email", example: "hr@company.com" },
-                  phone: { type: "string", example: "+256711111111" }
-                },
-                additionalProperties: false
-              },
-              { type: "string", format: "email", description: "Temporary simple email form" }
-            ],
-            description: "Canonical property name is hrContact (case-sensitive). Deprecated alias hrcontact is accepted temporarily."
-          },
-          hrcontact: {
-            description: "Deprecated lowercase alias for hrContact. Do not send both.",
-            deprecated: true
-          },
-          acceptedTerms: { type: "boolean", enum: [true] }
-        },
-        additionalProperties: false
+        additionalProperties: false,
+        description:
+          "Canonical Verifier registration. Same personal fields as Holder. Verifier is a personal PlatformRole; do not send companyName, industry, country, hrContact, or hrcontact."
       },
       RegisterLegacyRequest: {
         type: "object",
@@ -439,14 +389,33 @@ export const openApiDocument = {
         type: "object",
         required: ["name", "slug", "contactEmail", "country"],
         properties: {
-          name: { type: "string", example: "Northwind Training Institute" },
-          slug: { type: "string", example: "northwind-training" },
-          registrationNumber: { type: "string", example: "NW-123456" },
-          website: { type: "string", format: "uri", example: "https://northwind.example.test" },
-          contactEmail: { type: "string", format: "email", example: "contact@northwind.example.test" },
-          country: { type: "string", example: "Canada" },
-          description: { type: "string", example: "Fictional vocational training provider." }
-        }
+          name: { type: "string", example: "Example Institution" },
+          slug: { type: "string", example: "example-institution" },
+          contactEmail: { type: "string", format: "email", example: "admin@example.com" },
+          country: {
+            type: "string",
+            example: "Cameroon",
+            description: "Required for organization application (PRD)."
+          },
+          registrationNumber: { type: "string", example: "RC-12345" },
+          website: { type: "string", format: "uri", example: "https://example.com" },
+          description: { type: "string", example: "Credential issuing institution" },
+          industry: {
+            type: "string",
+            example: "EDUCATION",
+            description:
+              "Optional Figma metadata. Prefer a stable code from GET /meta/industries. Codes or exact labels are normalized to codes when recognized. Not required by the PRD."
+          },
+          hrContactName: {
+            type: "string",
+            example: "Mary Human",
+            description:
+              "Optional Figma metadata. HR contact email and phone are not required on create; set later via PATCH /organizations/:organizationId if needed."
+          }
+        },
+        additionalProperties: false,
+        description:
+          "Authenticated organization application after personal HOLDER or VERIFIER signup and email verification. Creates a PENDING organization and ORGANIZATION_ADMIN membership atomically. Applicant PlatformRole remains unchanged. Issuing-organization approval by Platform Admin is separate from personal signup."
       },
       OrganizationRole: {
         type: "string",
@@ -2079,7 +2048,7 @@ export const openApiDocument = {
         summary: "Register a new account",
         tags: ["Authentication"],
         description:
-          "Supports canonical accountType registration (HOLDER, VERIFIER, ORGANIZATION) and legacy firstName/lastName requests. ORGANIZATION creates a PENDING organization with ORGANIZATION_ADMIN membership; platform role remains HOLDER. When EMAIL_VERIFICATION_ENABLED, returns PendingEmailVerificationRegistrationResponse (no tokens) until OTP verification succeeds. JSON property names are case-sensitive; hrContact is canonical.",
+          "Canonical public registration accepts only HOLDER or VERIFIER with identical personal fields, plus temporary legacy firstName/lastName requests. Issuing organizations are not a public auth account type — register a personal account, verify email, then POST /organizations. PLATFORM_ADMIN self-registration is rejected. When EMAIL_VERIFICATION_ENABLED, returns PendingEmailVerificationRegistrationResponse (no tokens) until OTP verification succeeds.",
         requestBody: {
           required: true,
           content: {
@@ -2090,43 +2059,23 @@ export const openApiDocument = {
                   summary: "Register Credential Holder",
                   value: {
                     accountType: "HOLDER",
-                    fullName: "Jane Holder",
-                    email: "jane.holder@example.test",
-                    phone: "+256700000000",
+                    fullName: "Jane User",
+                    email: "jane@example.com",
+                    phone: "+237670000001",
                     password: "SecurePassword1!",
                     confirmPassword: "SecurePassword1!",
                     acceptedTerms: true
                   }
                 },
                 verifier: {
-                  summary: "Register Verifier",
+                  summary: "Register Verifier (same personal fields as Holder)",
                   value: {
                     accountType: "VERIFIER",
-                    fullName: "Victor Verifier",
-                    email: "victor.verifier@example.test",
-                    phone: "+256700000001",
+                    fullName: "Jane User",
+                    email: "jane@example.com",
+                    phone: "+237670000001",
                     password: "SecurePassword1!",
                     confirmPassword: "SecurePassword1!",
-                    acceptedTerms: true
-                  }
-                },
-                organization: {
-                  summary: "Register Issuing Organization",
-                  value: {
-                    accountType: "ORGANIZATION",
-                    fullName: "Jane Smith",
-                    email: "jane@company.com",
-                    phone: "+256700000002",
-                    password: "SecurePassword1!",
-                    confirmPassword: "SecurePassword1!",
-                    companyName: "Lumora Solutions",
-                    industry: "EDUCATION",
-                    hrContact: {
-                      fullName: "Mary Human",
-                      email: "hr@company.com",
-                      phone: "+256711111111"
-                    },
-                    country: "Uganda",
                     acceptedTerms: true
                   }
                 },
@@ -2162,11 +2111,11 @@ export const openApiDocument = {
                     value: {
                       user: {
                         id: "clxyz1234567890",
-                        email: "jane.holder@example.test",
-                        fullName: "Jane Holder",
+                        email: "jane@example.com",
+                        fullName: "Jane User",
                         firstName: "Jane",
-                        lastName: "Holder",
-                        phone: "+256700000000",
+                        lastName: "User",
+                        phone: "+237670000001",
                         role: "HOLDER",
                         status: "ACTIVE",
                         emailVerifiedAt: "2026-08-06T10:00:00.000Z",
@@ -2182,8 +2131,8 @@ export const openApiDocument = {
                     value: {
                       verificationRequired: true,
                       verificationRequestId: "a1b2c3d4e5f6789012345678abcdef01",
-                      email: "jane.holder@example.test",
-                      maskedEmail: "j***@example.test",
+                      email: "jane@example.com",
+                      maskedEmail: "j***@example.com",
                       expiresInSeconds: 600,
                       resendAvailableInSeconds: 60
                     }
@@ -2193,10 +2142,23 @@ export const openApiDocument = {
             }
           },
           "400": {
-            description: "Validation error",
+            description:
+              "VALIDATION_ERROR for invalid payloads, or ORGANIZATION_APPLICATION_REQUIRED when accountType is ORGANIZATION",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" }
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                examples: {
+                  organizationApplicationRequired: {
+                    summary: "Issuing organization is not a public auth account type",
+                    value: {
+                      error: {
+                        code: "ORGANIZATION_APPLICATION_REQUIRED",
+                        message:
+                          "Register a personal Holder or Verifier account, verify the email, then submit an organization application."
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -2798,17 +2760,44 @@ export const openApiDocument = {
         summary: "Apply to onboard a new organization",
         tags: ["Organizations"],
         security: [{ bearerAuth: [] }],
+        description:
+          "Authenticated, email-verified personal users (HOLDER or VERIFIER) submit an issuing-organization application. Required: name, slug, contactEmail, country. Optional: registrationNumber, website, description, industry, hrContactName. Creates PENDING organization + ORGANIZATION_ADMIN membership atomically; applicant PlatformRole is unchanged. Platform Admin approval of the organization is separate from personal signup and does not gate public share-token verification.",
         requestBody: {
           required: true,
           content: {
             "application/json": {
-              schema: { $ref: "#/components/schemas/OrganizationApplicationRequest" }
+              schema: { $ref: "#/components/schemas/OrganizationApplicationRequest" },
+              examples: {
+                prdRequired: {
+                  summary: "PRD-required fields",
+                  value: {
+                    name: "Example Institution",
+                    slug: "example-institution",
+                    contactEmail: "admin@example.com",
+                    country: "Cameroon",
+                    registrationNumber: "RC-12345",
+                    website: "https://example.com",
+                    description: "Credential issuing institution"
+                  }
+                },
+                withFigmaMetadata: {
+                  summary: "Optional Figma industry and HR contact name",
+                  value: {
+                    name: "Example Institution",
+                    slug: "example-institution",
+                    contactEmail: "admin@example.com",
+                    country: "Cameroon",
+                    industry: "EDUCATION",
+                    hrContactName: "Mary Human"
+                  }
+                }
+              }
             }
           }
         },
         responses: {
           "201": {
-            description: "Organization application submitted",
+            description: "Organization application submitted (status PENDING)",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/OrganizationApplicationResponse" }
@@ -4449,7 +4438,7 @@ export const openApiDocument = {
         summary: "Publicly verify a credential via share token",
         tags: ["Verification"],
         description:
-          "No authentication required. Rate limited. The submitted token is hashed immediately and never logged. Unknown, expired, revoked, or exhausted links return a generic verification-unavailable response. Successful responses disclose only holder-approved fields.",
+          "No authentication required. Rate limited. Immediate public verification for a valid holder-approved share token — Platform Admin approval is not required per verification. The submitted token is hashed immediately and never logged. Unknown, expired, revoked, or exhausted links return a generic verification-unavailable response. Successful responses disclose only holder-approved fields.",
         parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
         responses: {
           "200": {

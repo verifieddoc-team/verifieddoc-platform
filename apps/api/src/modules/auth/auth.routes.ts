@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { authenticate } from "../../middleware/authenticate.js";
 import {
   authRateLimiter,
@@ -36,7 +36,37 @@ import {
 
 export const authRouter = Router();
 
-authRouter.post("/register", authRateLimiter, validateBody(registerSchema), registerHandler);
+/**
+ * Issuing organizations are not a public auth account type (PRD).
+ * Reject accountType ORGANIZATION before schema validation so clients get a
+ * stable product error instead of a generic VALIDATION_ERROR.
+ */
+function rejectOrganizationRegistrationAccountType(req: Request, res: Response, next: NextFunction) {
+  if (
+    req.body &&
+    typeof req.body === "object" &&
+    !Array.isArray(req.body) &&
+    (req.body as { accountType?: unknown }).accountType === "ORGANIZATION"
+  ) {
+    return res.status(400).json({
+      error: {
+        code: "ORGANIZATION_APPLICATION_REQUIRED",
+        message:
+          "Register a personal Holder or Verifier account, verify the email, then submit an organization application."
+      }
+    });
+  }
+
+  return next();
+}
+
+authRouter.post(
+  "/register",
+  authRateLimiter,
+  rejectOrganizationRegistrationAccountType,
+  validateBody(registerSchema),
+  registerHandler
+);
 authRouter.post("/login", authRateLimiter, validateBody(loginSchema), loginHandler);
 authRouter.post("/refresh", authRateLimiter, validateBody(refreshSchema), refreshHandler);
 authRouter.post("/logout", validateBody(logoutSchema), logoutHandler);

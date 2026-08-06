@@ -12,6 +12,39 @@ import {
 
 const app = createApp();
 
+async function registerVerifyAndApply(
+  email: string,
+  organization: Record<string, unknown>
+) {
+  const register = await request(app)
+    .post("/api/v1/auth/register")
+    .send({
+      accountType: "HOLDER",
+      fullName: "Industry Applicant",
+      email,
+      phone: `+2567${String(Math.floor(Math.random() * 100_000_000)).padStart(8, "0")}`,
+      password: "SecurePassword1!",
+      confirmPassword: "SecurePassword1!",
+      acceptedTerms: true
+    });
+  expect(register.status).toBe(201);
+
+  const verify = await request(app)
+    .post("/api/v1/auth/email-verification/verify")
+    .send({
+      requestId: register.body.verificationRequestId,
+      otp: getTestOtpForRequest(register.body.verificationRequestId)
+    });
+  expect(verify.status).toBe(200);
+
+  const apply = await request(app)
+    .post("/api/v1/organizations")
+    .set("Authorization", `Bearer ${verify.body.accessToken}`)
+    .send(organization);
+  expect(apply.status).toBe(201);
+  return apply;
+}
+
 describe("Public industries metadata", () => {
   beforeAll(async () => {
     await cleanupTestData();
@@ -47,30 +80,16 @@ describe("Public industries metadata", () => {
     );
   });
 
-  it("accepts industry codes and labels and stores codes when recognized", async () => {
+  it("accepts industry codes and labels on organization application and stores codes when recognized", async () => {
     const codeEmail = createTestEmail("ind-code");
-    const codeRegister = await request(app)
-      .post("/api/v1/auth/register")
-      .send({
-        accountType: "ORGANIZATION",
-        fullName: "Industry Code",
-        email: codeEmail,
-        phone: "+256700111222",
-        password: "SecurePassword1!",
-        confirmPassword: "SecurePassword1!",
-        companyName: "Code Org",
-        industry: "BANKING_FINTECH",
-        country: "Uganda",
-        hrContact: { email: "hr@code.org.test" },
-        acceptedTerms: true
-      });
-    expect(codeRegister.status).toBe(201);
-    await request(app)
-      .post("/api/v1/auth/email-verification/verify")
-      .send({
-        requestId: codeRegister.body.verificationRequestId,
-        otp: getTestOtpForRequest(codeRegister.body.verificationRequestId)
-      });
+    const codeApply = await registerVerifyAndApply(codeEmail, {
+      name: "Code Org",
+      slug: `test-org-code-${Date.now()}`,
+      contactEmail: "hr@code.org.test",
+      country: "Uganda",
+      industry: "BANKING_FINTECH"
+    });
+    expect(codeApply.body.organization.industry).toBe("BANKING_FINTECH");
 
     const codeOrg = await prisma.organization.findFirstOrThrow({
       where: { members: { some: { user: { email: codeEmail } } } }
@@ -78,22 +97,13 @@ describe("Public industries metadata", () => {
     expect(codeOrg.industry).toBe("BANKING_FINTECH");
 
     const labelEmail = createTestEmail("ind-label");
-    const labelRegister = await request(app)
-      .post("/api/v1/auth/register")
-      .send({
-        accountType: "ORGANIZATION",
-        fullName: "Industry Label",
-        email: labelEmail,
-        phone: "+256700333444",
-        password: "SecurePassword1!",
-        confirmPassword: "SecurePassword1!",
-        companyName: "Label Org",
-        industry: "Education",
-        country: "Uganda",
-        hrContact: { email: "hr@label.org.test" },
-        acceptedTerms: true
-      });
-    expect(labelRegister.status).toBe(201);
+    await registerVerifyAndApply(labelEmail, {
+      name: "Label Org",
+      slug: `test-org-label-${Date.now()}`,
+      contactEmail: "hr@label.org.test",
+      country: "Uganda",
+      industry: "Education"
+    });
 
     const labelOrg = await prisma.organization.findFirstOrThrow({
       where: { members: { some: { user: { email: labelEmail } } } }
@@ -102,22 +112,13 @@ describe("Public industries metadata", () => {
 
     // Temporary compatibility: unrecognized free-form values are stored trimmed as-is.
     const legacyEmail = createTestEmail("ind-legacy");
-    const legacyRegister = await request(app)
-      .post("/api/v1/auth/register")
-      .send({
-        accountType: "ORGANIZATION",
-        fullName: "Industry Legacy",
-        email: legacyEmail,
-        phone: "+256700555666",
-        password: "SecurePassword1!",
-        confirmPassword: "SecurePassword1!",
-        companyName: "Legacy Org",
-        industry: "Technology",
-        country: "Uganda",
-        hrContact: { email: "hr@legacy.org.test" },
-        acceptedTerms: true
-      });
-    expect(legacyRegister.status).toBe(201);
+    await registerVerifyAndApply(legacyEmail, {
+      name: "Legacy Org",
+      slug: `test-org-legacy-${Date.now()}`,
+      contactEmail: "hr@legacy.org.test",
+      country: "Uganda",
+      industry: "Technology"
+    });
     const legacyOrg = await prisma.organization.findFirstOrThrow({
       where: { members: { some: { user: { email: legacyEmail } } } }
     });
