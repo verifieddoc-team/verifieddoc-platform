@@ -34,7 +34,7 @@ export function useVerifierDashboard() {
 
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState(null);
-
+  const [verificationResult, setVerificationResult] = useState(null);
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
@@ -63,20 +63,38 @@ export function useVerifierDashboard() {
   }, [load]);
 
   const verify = useCallback(
-    async (credentialId) => {
-      setVerifying(true);
-      setVerifyError(null);
-      try {
-        await verifyCredential(credentialId);
-        await load(); // refresh stats/history after a successful check
-      } catch (err) {
-        setVerifyError(err?.message ?? "Unable to verify credential");
-      } finally {
-        setVerifying(false);
-      }
-    },
-    [load]
-  );
+  async (input) => {
+    setVerifying(true);
+    setVerifyError(null);
+    setVerificationResult(null);
 
-  return { ...state, refresh: load, verify, verifying, verifyError };
+    try {
+      const result = await verifyCredential(input);
+
+      setVerificationResult(result);
+
+      await load();
+
+      return result;
+    } catch (err) {
+      setVerifyError(
+        err?.message ?? "Unable to verify credential"
+      );
+
+      return null;
+    } finally {
+      setVerifying(false);
+    }
+  },
+  [load]
+);
+
+return {
+  ...state,
+  refresh: load,
+  verify,
+  verifying,
+  verifyError,
+  verificationResult,
+};
 }
