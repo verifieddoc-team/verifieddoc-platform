@@ -1,3 +1,4 @@
+import { mobileApi } from "./api";
 // No verifier dashboard endpoint exists yet, so this is a stub. It
 // resolves with an "empty" shape so the UI renders its loading/empty
 // states correctly. Replace the bodies below with real requests —
@@ -19,10 +20,29 @@ export async function fetchVerifierDashboard() {
   };
 }
 
-export async function verifyCredential(credentialId) {
-  // TODO(backend): replace with a real request once available, e.g.:
-  //   const res = await apiClient.post("/verifier/verify", { credentialId });
-  //   return res.data;
+function extractVerificationToken(input) {
+  const value = input?.trim();
 
-  throw new Error("Credential verification is not connected to a backend yet.");
+  if (!value) {
+    throw new Error("Enter a verification link or token.");
+  }
+
+  const marker = "/verify/";
+  const markerIndex = value.indexOf(marker);
+
+  if (markerIndex >= 0) {
+    const tokenPart = value.slice(
+      markerIndex + marker.length
+    );
+
+    return tokenPart.split(/[?#]/)[0];
+  }
+
+  return value;
+}
+
+export async function verifyCredential(input) {
+  const token = extractVerificationToken(input);
+
+  return mobileApi.verify(token);
 }
