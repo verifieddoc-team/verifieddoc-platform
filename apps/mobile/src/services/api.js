@@ -71,7 +71,35 @@ export const mobileApi = {
   wallet(accessToken) {
     return request("/credentials?page=1&limit=50", {}, accessToken);
   },
+credential(accessToken, credentialId) {
+  return request(
+    `/credentials/${encodeURIComponent(credentialId)}`,
+    {},
+    accessToken,
+  );
+},
 
+shareLinks(accessToken, credentialId) {
+  return request(
+    `/credentials/${encodeURIComponent(credentialId)}/share-links`,
+    {},
+    accessToken,
+  );
+},
+
+revokeShareLink(accessToken, credentialId, shareLinkId) {
+  return request(
+    `/credentials/${encodeURIComponent(
+      credentialId
+    )}/share-links/${encodeURIComponent(
+      shareLinkId
+    )}/revoke`,
+    {
+      method: "PATCH",
+    },
+    accessToken,
+  );
+},
   createShareLink(accessToken, credentialId, input) {
     return request(
       `/credentials/${encodeURIComponent(credentialId)}/share-links`,
