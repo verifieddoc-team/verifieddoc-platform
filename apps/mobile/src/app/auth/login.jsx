@@ -147,23 +147,6 @@ const handleLogin = async () => {
     setLoading(false);
   }
 };
-    // TODO: wire up real authentication logic (call the login API,
-    // store the returned token/user in auth state, handle errors).
-    console.log("Logging in as:", selectedRole, {
-      email,
-      password,
-      rememberMe,
-    });
-
-    if (selectedRole === "verifier") {
-      router.push("/verifier");
-    } else {
-      // Credential Holder and Issuing Institution both land on /dashboard
-      // for now. Holder doesn't have its own home screen yet — this is a
-      // placeholder until one exists.
-      router.push("/dashboard");
-    }
-  };
 
   if (!fontsLoaded) return null;
 
