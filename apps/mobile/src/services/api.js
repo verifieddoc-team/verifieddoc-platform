@@ -38,9 +38,40 @@ export const mobileApi = {
       body: JSON.stringify({ email, password }),
     });
   },
+
+  register(input) {
+    return request("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  me(accessToken) {
+    return request("/auth/me", {}, accessToken);
+  },
+
+  refresh(refreshToken) {
+    return request("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    });
+  },
+
+  logout(refreshToken) {
+    return request("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    });
+  },
+
+  organizations(accessToken) {
+    return request("/organizations", {}, accessToken);
+  },
+
   wallet(accessToken) {
     return request("/credentials?page=1&limit=50", {}, accessToken);
   },
+
   createShareLink(accessToken, credentialId, input) {
     return request(
       `/credentials/${encodeURIComponent(credentialId)}/share-links`,
@@ -51,6 +82,7 @@ export const mobileApi = {
       accessToken,
     );
   },
+
   verify(token) {
     return request(`/verify/${encodeURIComponent(token)}`);
   },
