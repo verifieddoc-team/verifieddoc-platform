@@ -7,13 +7,16 @@ import {
   Pressable,
   TextInput,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useFonts, Poppins_600SemiBold } from "@expo-google-fonts/poppins";
 import { Inter_400Regular, Inter_500Medium } from "@expo-google-fonts/inter";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
-
+import { mobileApi } from "../../services/api";
+import { saveSession } from "../../services/session";
 const ROLES = [
   {
     key: "holder",
@@ -53,7 +56,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-
+const [loading, setLoading] = useState(false);
   const handleForgotPassword = () => {
     router.push("/auth/forgot-password");
   };
@@ -62,7 +65,88 @@ export default function LoginScreen() {
     router.push("/auth/sign-up");
   };
 
-  const handleLogin = () => {
+const handleLogin = async () => {
+  const cleanEmail = email.trim().toLowerCase();
+
+  if (!cleanEmail || !password) {
+    Alert.alert("Missing information", "Enter your email address and password.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    // Real Railway authentication
+    const session = await mobileApi.login(cleanEmail, password);
+
+    // Confirm the token works and get the current backend user
+    const currentUser = await mobileApi.me(session.accessToken);
+
+    const completeSession = {
+      ...session,
+      user: currentUser,
+    };
+
+    // Store tokens/user securely on the phone
+    await saveSession(completeSession);
+
+    // Verifier workspace
+    if (selectedRole === "verifier") {
+      if (
+        currentUser.role !== "VERIFIER" &&
+        currentUser.role !== "PLATFORM_ADMIN"
+      ) {
+        Alert.alert(
+          "Role mismatch",
+          "This account does not have verifier access."
+        );
+        return;
+      }
+
+      router.replace("/verifier");
+      return;
+    }
+
+    // Institution workspace
+    if (selectedRole === "institution") {
+      const memberships = await mobileApi.organizations(session.accessToken);
+
+      const organisations = Array.isArray(memberships)
+        ? memberships
+        : memberships?.data ?? [];
+
+      if (organisations.length === 0) {
+        Alert.alert(
+          "No institution access",
+          "This account is not currently a member of an issuing institution."
+        );
+        return;
+      }
+
+      router.replace("/organisation");
+      return;
+    }
+
+    // Holder workspace
+    if (currentUser.role !== "HOLDER") {
+      Alert.alert(
+        "Role mismatch",
+        "This account is not registered as a credential holder."
+      );
+      return;
+    }
+
+    // Temporary until the dedicated holder wallet route is added
+    router.replace("/dashboard");
+  } catch (error) {
+    Alert.alert(
+      "Login failed",
+      error?.message ?? "Unable to sign in. Please try again."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
     // TODO: wire up real authentication logic (call the login API,
     // store the returned token/user in auth state, handle errors).
     console.log("Logging in as:", selectedRole, {
@@ -235,15 +319,21 @@ export default function LoginScreen() {
         </View>
 
         {/* Login button */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.primaryButtonPressed,
-          ]}
-          onPress={handleLogin}
-        >
-          <Text style={styles.primaryButtonText}>Log In</Text>
-        </Pressable>
+       <Pressable
+  style={({ pressed }) => [
+    styles.primaryButton,
+    pressed && styles.primaryButtonPressed,
+    loading && { opacity: 0.6 },
+  ]}
+  onPress={handleLogin}
+  disabled={loading}
+>
+  {loading ? (
+    <ActivityIndicator color="#FFFFFF" />
+  ) : (
+    <Text style={styles.primaryButtonText}>Log In</Text>
+  )}
+</Pressable>
 
         {/* Bottom sign-up prompt */}
         <View style={styles.bottomTextRow}>
