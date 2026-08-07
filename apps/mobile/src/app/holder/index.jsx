@@ -176,7 +176,15 @@ export default function HolderWalletScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <View style={styles.card}>
+           <Pressable
+  style={({ pressed }) => [
+    styles.card,
+    pressed && { opacity: 0.8 },
+  ]}
+  onPress={() =>
+    router.push(`/holder/${item.id}`)
+  }
+>
               <View style={styles.cardTop}>
                 <View style={styles.iconCircle}>
                   <MaterialIcons
@@ -245,7 +253,7 @@ export default function HolderWalletScreen() {
                   </Text>
                 </View>
               </View>
-            </View>
+            </Pressable>
           )}
         />
       )}
