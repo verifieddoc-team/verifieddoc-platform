@@ -108,7 +108,7 @@ export default function VerifierHomeScreen() {
         )}
 
         <VerifyCredentialForm onVerify={verify} verifying={verifying} />
-        {verifyError ? {verificationResult ? (
+       {verificationResult ? (
   <View
     style={[
       styles.resultCard,
