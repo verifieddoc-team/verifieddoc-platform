@@ -80,8 +80,7 @@ const handleLogin = async () => {
     const session = await mobileApi.login(cleanEmail, password);
 
     // Confirm the token works and get the current backend user
-    const currentUser = await mobileApi.me(session.accessToken);
-
+   const { user: currentUser } = await mobileApi.me(session.accessToken);
     const completeSession = {
       ...session,
       user: currentUser,
@@ -111,10 +110,7 @@ const handleLogin = async () => {
     if (selectedRole === "institution") {
       const memberships = await mobileApi.organizations(session.accessToken);
 
-      const organisations = Array.isArray(memberships)
-        ? memberships
-        : memberships?.data ?? [];
-
+      const organisations = memberships?.organizations ?? [];
       if (organisations.length === 0) {
         Alert.alert(
           "No institution access",
