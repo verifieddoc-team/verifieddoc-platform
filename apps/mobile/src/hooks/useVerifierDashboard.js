@@ -34,7 +34,7 @@ export function useVerifierDashboard() {
 
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState(null);
-const [verificationResult, setVerificationResult] = useState(null);
+  const [verificationResult, setVerificationResult] = useState(null);
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
@@ -97,3 +97,4 @@ return {
   verifyError,
   verificationResult,
 };
+}
