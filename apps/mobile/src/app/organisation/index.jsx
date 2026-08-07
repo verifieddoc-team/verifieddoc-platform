@@ -38,11 +38,9 @@ export default function OrganisationPortalScreen() {
     router.back();
   };
 
-  const handleIssueDocument = () => {
-    // TODO: navigate to the document issuing flow once it exists,
-    // e.g. router.push("/dashboard/issue")
-    console.log("Issue Document pressed");
-  };
+ const handleIssueDocument = () => {
+  router.push("/organisation/issue");
+};
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
