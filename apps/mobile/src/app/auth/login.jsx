@@ -132,8 +132,8 @@ const handleLogin = async () => {
       return;
     }
 
-    // Temporary until the dedicated holder wallet route is added
-    router.replace("/dashboard");
+    // Holder credential wallet
+   router.replace("/holder");
   } catch (error) {
     Alert.alert(
       "Login failed",
