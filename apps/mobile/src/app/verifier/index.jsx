@@ -1,5 +1,9 @@
-import React from "react";
-import { View, ScrollView, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
@@ -19,7 +23,17 @@ import VerifyCredentialForm from "../../components/verifier/VerifyCredentialForm
 import RecentVerifications from "../../components/verifier/RecentVerifications";
 import StatCard from "../../components/dashboard/StatCard"; // reused as-is, same card shape as the org dashboard
 import EmptyState from "../../components/dashboard/EmptyState";
+function formatVerificationDate(value) {
+  if (!value) return "No expiry";
 
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return date.toLocaleDateString();
+}
 export default function VerifierHomeScreen() {
   const router = useRouter();
   const { user } = useAuth?.() ?? { user: null };
@@ -31,16 +45,16 @@ export default function VerifierHomeScreen() {
     Inter_500Medium,
   });
 
-  const {
-    loading,
-    error,
-    stats,
-    recentVerifications,
-    verify,
-    verifying,
-    verifyError,
-  } = useVerifierDashboard();
-
+ const {
+  loading,
+  error,
+  stats,
+  recentVerifications,
+  verify,
+  verifying,
+  verifyError,
+  verificationResult,
+} = useVerifierDashboard();
   if (!fontsLoaded) return null;
 
   return (
@@ -94,11 +108,115 @@ export default function VerifierHomeScreen() {
         )}
 
         <VerifyCredentialForm onVerify={verify} verifying={verifying} />
-        {verifyError ? (
-          <View style={styles.verifyErrorWrap}>
-            <EmptyState icon="error-outline" message={verifyError} />
-          </View>
-        ) : null}
+        {verifyError ? {verificationResult ? (
+  <View
+    style={[
+      styles.resultCard,
+      verificationResult.result === "VALID"
+        ? styles.resultCardValid
+        : styles.resultCardInvalid,
+    ]}
+  >
+    <Text
+      style={[
+        styles.resultStatus,
+        verificationResult.result === "VALID"
+          ? styles.resultStatusValid
+          : styles.resultStatusInvalid,
+      ]}
+    >
+      {verificationResult.result === "VALID"
+        ? "✓ VALID"
+        : `⚠ ${verificationResult.result}`}
+    </Text>
+
+    <Text style={styles.resultTitle}>
+      {verificationResult.credential?.title ??
+        "Credential"}
+    </Text>
+
+    <Text style={styles.resultIssuer}>
+      {verificationResult.credential?.organization
+        ?.name ?? "Unknown issuer"}
+    </Text>
+
+    <View style={styles.resultDivider} />
+
+    <View style={styles.resultRow}>
+      <Text style={styles.resultLabel}>
+        Credential status
+      </Text>
+      <Text style={styles.resultValue}>
+        {verificationResult.credential
+          ?.effectiveStatus ?? "Unknown"}
+      </Text>
+    </View>
+
+    <View style={styles.resultRow}>
+      <Text style={styles.resultLabel}>Type</Text>
+      <Text style={styles.resultValue}>
+        {verificationResult.credential
+          ?.credentialType ?? "Not available"}
+      </Text>
+    </View>
+
+    <View style={styles.resultRow}>
+      <Text style={styles.resultLabel}>Issued</Text>
+      <Text style={styles.resultValue}>
+        {formatVerificationDate(
+          verificationResult.credential?.issuedAt
+        )}
+      </Text>
+    </View>
+
+    <View style={styles.resultRow}>
+      <Text style={styles.resultLabel}>Expires</Text>
+      <Text style={styles.resultValue}>
+        {formatVerificationDate(
+          verificationResult.credential?.expiresAt
+        )}
+      </Text>
+    </View>
+
+    <View style={styles.resultRow}>
+      <Text style={styles.resultLabel}>Public ID</Text>
+      <Text style={styles.resultValue}>
+        {verificationResult.credential?.publicId ??
+          "Not available"}
+      </Text>
+    </View>
+
+    {verificationResult.credential?.holderName ? (
+      <View style={styles.resultRow}>
+        <Text style={styles.resultLabel}>
+          Credential holder
+        </Text>
+        <Text style={styles.resultValue}>
+          {verificationResult.credential.holderName}
+        </Text>
+      </View>
+    ) : null}
+
+    {verificationResult.credential?.referenceNo ? (
+      <View style={styles.resultRow}>
+        <Text style={styles.resultLabel}>
+          Reference
+        </Text>
+        <Text style={styles.resultValue}>
+          {verificationResult.credential.referenceNo}
+        </Text>
+      </View>
+    ) : null}
+  </View>
+) : null}
+       {verifyError ? (
+  <View style={styles.verifyErrorWrap}>
+    <EmptyState
+      icon="error-outline"
+      message={verifyError}
+    />
+  </View>
+) : null}
 
         <RecentVerifications
           records={recentVerifications}
@@ -115,6 +233,67 @@ export default function VerifierHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+    resultCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  resultCardValid: {
+    backgroundColor: "#EDF8F1",
+    borderColor: "#8AC7A0",
+  },
+  resultCardInvalid: {
+    backgroundColor: "#FFF1EF",
+    borderColor: "#DCA19A",
+  },
+  resultStatus: {
+    fontFamily: "Poppins_700Bold",
+    fontSize: 18,
+    marginBottom: SPACING.sm,
+  },
+  resultStatusValid: {
+    color: "#247A43",
+  },
+  resultStatusInvalid: {
+    color: COLORS.error,
+  },
+  resultTitle: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 18,
+    color: COLORS.text,
+  },
+  resultIssuer: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 3,
+  },
+  resultDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: SPACING.md,
+  },
+  resultRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: SPACING.sm,
+  },
+  resultLabel: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  resultValue: {
+    flex: 1.3,
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: COLORS.text,
+    textAlign: "right",
+  },
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.primary,
