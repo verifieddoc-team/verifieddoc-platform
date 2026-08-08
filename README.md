@@ -36,6 +36,7 @@ VerifiedDoc does not inspect uploaded documents with AI, issue credentials on be
 - [Troubleshooting](#troubleshooting)
 - [Building on VerifiedDoc](#building-on-verifieddoc)
 - [API Documentation](#api-documentation)
+- [Live Staging Deployment](#live-staging-deployment)
 - [Demo Accounts and Testing Data](#demo-accounts-and-testing-data)
 - [Security and Privacy Considerations](#security-and-privacy-considerations)
 - [Known Limitations and Open Issues](#known-limitations-and-open-issues)
@@ -226,6 +227,22 @@ Never commit credentials, access tokens, production data, or real identity docum
 
 The API publishes a full OpenAPI 3.1 contract at `/openapi.json`, covering authentication, organizations, credentials, share links, invitations, platform administration, and public verification. An interactive, browsable version of the same contract is available at `/docs` through Swagger UI. Client applications should integrate against this contract rather than duplicating backend types manually. Contract changes must go through a backend pull request, be reviewed by affected client teams, and be announced before merging.
 
+## Live Staging Deployment
+
+Railway hosts the current staging deployment of the VerifiedDoc API. Deployment ownership sits with the Backend Engineering Lead. Full Railway configuration and ownership notes are in [docs/RAILWAY-DEPLOYMENT.md](docs/RAILWAY-DEPLOYMENT.md).
+
+| Item | Value |
+|---|---|
+| Hosting provider | Railway |
+| Environment | Staging |
+| Deployment owner | Backend Engineering Lead |
+| API base | `https://verifieddoc-platform-production.up.railway.app/api/v1` |
+| Health | `https://verifieddoc-platform-production.up.railway.app/api/v1/health` |
+| Readiness | `https://verifieddoc-platform-production.up.railway.app/api/v1/ready` |
+| Swagger | `https://verifieddoc-platform-production.up.railway.app/docs` |
+| OpenAPI | `https://verifieddoc-platform-production.up.railway.app/openapi.json` |
+
+`GET /` returns `NOT_FOUND` intentionally. VerifiedDoc exposes an API surface only; no root webpage route is defined on the API service.
 ## Demo Accounts and Testing Data
 
 Fictional accounts and credentials (active, expired, and revoked) are created through a gated seed script. Seeding requires `ALLOW_DEMO_SEED=true` and a `DEMO_PASSWORD` value to be set in the environment; passwords and hashes are never printed to the console. Do not use real credentials, personal information, or organization records for testing. (Pending: actual login details to be shared once public deployment is live.)
