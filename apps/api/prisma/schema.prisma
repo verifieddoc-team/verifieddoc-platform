@@ -31,27 +31,142 @@ enum CredentialStatus {
   REVOKED
 }
 
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum VerificationMethod {
+  SHARE_TOKEN
+  QR
+  PUBLIC_ID
+  FILE_HASH
+}
+
+enum VerificationOutcome {
+  VERIFIED
+  EXPIRED
+  REVOKED
+  INVALID
+  NOT_FOUND
+}
+
+enum VerificationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum OrganizationDocumentType {
+  REGISTRATION_CERTIFICATE
+  TAX_DOCUMENT
+  ACCREDITATION
+  OTHER
+}
+
+enum DocumentUploadStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+enum FraudAlertType {
+  HIGH_RISK_DOCUMENT
+  MULTIPLE_VERIFICATION_FAILURES
+  REVOKED_CREDENTIAL_ACCESS
+  FILE_HASH_MISMATCH
+  SUSPICIOUS_ACTIVITY
+}
+
+enum FraudAlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FraudAlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+enum NotificationType {
+  CREDENTIAL_ISSUED
+  CREDENTIAL_REVOKED
+  ORGANIZATION_APPROVED
+  ORGANIZATION_REJECTED
+  ORGANIZATION_INVITATION
+  RECIPIENT_INVITATION
+  VERIFICATION_REQUEST_SUBMITTED
+  VERIFICATION_REQUEST_REVIEWED
+  FRAUD_ALERT
+  SHARE_LINK_USED
+  GENERIC
+}
+
 model User {
-  id             String               @id @default(cuid())
-  email          String               @unique
-  passwordHash   String
-  firstName      String
-  lastName       String
-  role           PlatformRole         @default(HOLDER)
-  memberships    OrganizationMember[]
-  credentials    Credential[]         @relation("CredentialHolder")
-  issued          Credential[]         @relation("CredentialIssuer")
-  revokedCredentials Credential[]      @relation("CredentialRevoker")
-  shareLinks      ShareLink[]          @relation("ShareLinkCreator")
-  revokedShareLinks ShareLink[]        @relation("ShareLinkRevoker")
-  auditLogs       AuditLog[]           @relation("AuditActor")
-  refreshTokens  RefreshToken[]
-  reviewedOrganizations Organization[] @relation("OrganizationReviewer")
-  sentInvitations OrganizationInvitation[] @relation("InvitationInviter")
-  acceptedInvitations OrganizationInvitation[] @relation("InvitationAccepter")
-  revokedInvitations OrganizationInvitation[] @relation("InvitationRevoker")
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  id                            String                       @id @default(cuid())
+  email                         String                       @unique
+  passwordHash                  String
+  fullName                      String                       @default("")
+  firstName                     String
+  lastName                      String
+  phone                         String?                      @unique
+  status                        UserStatus                   @default(ACTIVE)
+  suspendedAt                   DateTime?
+  suspendedReason               String?
+  suspendedById                 String?
+  termsAcceptedAt               DateTime?
+  privacyAcceptedAt             DateTime?
+  termsVersion                  String?
+  privacyVersion                String?
+  role                          PlatformRole                 @default(HOLDER)
+  /// Null means the account has not completed signup email verification.
+  /// Existing production users are backfilled to createdAt by migration so they are not locked out.
+  emailVerifiedAt               DateTime?
+  memberships                   OrganizationMember[]
+  credentials                   Credential[]                 @relation("CredentialHolder")
+  issued                        Credential[]                 @relation("CredentialIssuer")
+  revokedCredentials            Credential[]                 @relation("CredentialRevoker")
+  shareLinks                    ShareLink[]                  @relation("ShareLinkCreator")
+  revokedShareLinks             ShareLink[]                  @relation("ShareLinkRevoker")
+  auditLogs                     AuditLog[]                   @relation("AuditActor")
+  refreshTokens                 RefreshToken[]
+  reviewedOrganizations         Organization[]               @relation("OrganizationReviewer")
+  sentInvitations               OrganizationInvitation[]     @relation("InvitationInviter")
+  acceptedInvitations           OrganizationInvitation[]     @relation("InvitationAccepter")
+  revokedInvitations            OrganizationInvitation[]     @relation("InvitationRevoker")
+  passwordResetChallenges       PasswordResetChallenge[]
+  emailVerificationChallenges   EmailVerificationChallenge[]
+  suspendedBy                   User?                        @relation("UserSuspender", fields: [suspendedById], references: [id], onDelete: SetNull)
+  suspendedUsers                User[]                       @relation("UserSuspender")
+  verificationEvents            VerificationEvent[]          @relation("VerificationActor")
+  verificationRequestsMade      VerificationRequest[]        @relation("VerificationRequester")
+  verificationRequestsReviewed  VerificationRequest[]        @relation("VerificationReviewer")
+  heldVerificationRequests      VerificationRequest[]        @relation("VerificationHolder")
+  savedOrganizations            SavedOrganization[]
+  organizationRecipients        OrganizationRecipient[]
+  recipientInvitationsSent      RecipientInvitation[]        @relation("RecipientInviter")
+  recipientInvitationsAccepted  RecipientInvitation[]        @relation("RecipientAccepter")
+  recipientInvitationsRevoked   RecipientInvitation[]        @relation("RecipientRevoker")
+  organizationDocumentsUploaded OrganizationDocument[]       @relation("OrgDocumentUploader")
+  organizationDocumentsReviewed OrganizationDocument[]       @relation("OrgDocumentReviewer")
+  credentialArtifactsUploaded   CredentialArtifact[]
+  personalDocuments             PersonalDocument[]
+  verificationUploads           VerificationUpload[]
+  fraudAlertsResolved           FraudAlert[]                 @relation("FraudAlertResolver")
+  fraudAlertsAsActor            FraudAlert[]                 @relation("FraudAlertActor")
+  notifications                 Notification[]
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 model RefreshToken {
@@ -73,27 +188,79 @@ model RefreshToken {
   @@index([expiresAt])
 }
 
+model PasswordResetChallenge {
+  id             String    @id @default(cuid())
+  userId         String
+  otpHash        String
+  resetTokenHash String?   @unique
+  attempts       Int       @default(0)
+  expiresAt      DateTime
+  verifiedAt     DateTime?
+  usedAt         DateTime?
+  lockedAt       DateTime?
+  requestedIp    String?
+  userAgent      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+/// Signup email-verification OTP challenge. Kept separate from PasswordResetChallenge.
+model EmailVerificationChallenge {
+  id                String    @id @default(cuid())
+  userId            String
+  otpHash           String
+  attempts          Int       @default(0)
+  expiresAt         DateTime
+  verifiedAt        DateTime?
+  lockedAt          DateTime?
+  invalidatedAt     DateTime?
+  resendAvailableAt DateTime
+  requestedIp       String?
+  userAgent         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@index([resendAvailableAt])
+}
+
 model Organization {
-  id                 String               @id @default(cuid())
-  name               String
-  slug               String               @unique
-  emailDomain        String?
-  registrationNumber String?
-  website            String?
-  contactEmail       String
-  country            String
-  description        String?
-  rejectionReason    String?
-  reviewedAt         DateTime?
-  reviewedById       String?
-  status             OrganizationStatus   @default(PENDING)
-  members            OrganizationMember[]
-  invitations        OrganizationInvitation[]
-  credentials        Credential[]
-  auditLogs          AuditLog[]
-  reviewedBy         User?                @relation("OrganizationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  id                    String                   @id @default(cuid())
+  name                  String
+  slug                  String                   @unique
+  emailDomain           String?
+  registrationNumber    String?
+  website               String?
+  contactEmail          String
+  country               String
+  description           String?
+  industry              String?
+  hrContactName         String?
+  hrContactEmail        String?
+  hrContactPhone        String?
+  rejectionReason       String?
+  reviewedAt            DateTime?
+  reviewedById          String?
+  status                OrganizationStatus       @default(PENDING)
+  members               OrganizationMember[]
+  invitations           OrganizationInvitation[]
+  credentials           Credential[]
+  auditLogs             AuditLog[]
+  verificationEvents    VerificationEvent[]
+  verificationRequests  VerificationRequest[]
+  savedByVerifiers      SavedOrganization[]
+  recipients            OrganizationRecipient[]
+  recipientInvitations  RecipientInvitation[]
+  registrationDocuments OrganizationDocument[]
+  reviewedBy            User?                    @relation("OrganizationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 
   @@index([status])
   @@index([createdAt])
@@ -138,30 +305,71 @@ model OrganizationInvitation {
   @@index([expiresAt])
 }
 
+model OrganizationRecipient {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, createdAt])
+  @@index([userId])
+}
+
+model RecipientInvitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  email          String
+  tokenHash      String       @unique
+  activeKey      String?      @unique
+  invitedById    String
+  acceptedById   String?
+  revokedById    String?
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy      User         @relation("RecipientInviter", fields: [invitedById], references: [id])
+  acceptedBy     User?        @relation("RecipientAccepter", fields: [acceptedById], references: [id], onDelete: SetNull)
+  revokedBy      User?        @relation("RecipientRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([email])
+  @@index([expiresAt])
+}
+
 model Credential {
-  id               String           @id @default(cuid())
-  publicId         String           @unique @default(cuid())
-  title            String
-  description      String?
-  credentialType   String
-  referenceNo      String
-  status           CredentialStatus @default(ACTIVE)
-  issuedAt         DateTime
-  expiresAt        DateTime?
-  revokedAt        DateTime?
-  revocationReason String?
-  revokedById      String?
-  metadata         Json?
-  organizationId   String
-  holderId         String
-  issuedById       String
-  organization     Organization     @relation(fields: [organizationId], references: [id])
-  holder           User             @relation("CredentialHolder", fields: [holderId], references: [id])
-  issuedBy         User             @relation("CredentialIssuer", fields: [issuedById], references: [id])
-  revokedBy        User?            @relation("CredentialRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
-  shareLinks       ShareLink[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                   String                @id @default(cuid())
+  publicId             String                @unique @default(cuid())
+  title                String
+  description          String?
+  credentialType       String
+  referenceNo          String
+  status               CredentialStatus      @default(ACTIVE)
+  issuedAt             DateTime
+  expiresAt            DateTime?
+  revokedAt            DateTime?
+  revocationReason     String?
+  revokedById          String?
+  metadata             Json?
+  organizationId       String
+  holderId             String
+  issuedById           String
+  organization         Organization          @relation(fields: [organizationId], references: [id])
+  holder               User                  @relation("CredentialHolder", fields: [holderId], references: [id])
+  issuedBy             User                  @relation("CredentialIssuer", fields: [issuedById], references: [id])
+  revokedBy            User?                 @relation("CredentialRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  shareLinks           ShareLink[]
+  verificationEvents   VerificationEvent[]
+  verificationRequests VerificationRequest[]
+  artifacts            CredentialArtifact[]
+  fraudAlerts          FraudAlert[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   @@unique([organizationId, referenceNo])
   @@index([holderId, status])
@@ -171,26 +379,221 @@ model Credential {
 }
 
 model ShareLink {
-  id                String     @id @default(cuid())
-  tokenHash         String     @unique
-  credentialId      String
-  createdById       String
-  expiresAt         DateTime
-  revokedAt         DateTime?
-  revokedById       String?
-  maxViews          Int?
-  viewCount         Int        @default(0)
-  lastViewedAt      DateTime?
-  disclosedClaims   String[]   @default([])
-  includeHolderName Boolean    @default(false)
-  includeReferenceNo Boolean   @default(false)
-  credential        Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
-  createdBy         User       @relation("ShareLinkCreator", fields: [createdById], references: [id])
-  revokedBy         User?      @relation("ShareLinkRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
-  createdAt         DateTime   @default(now())
+  id                 String              @id @default(cuid())
+  tokenHash          String              @unique
+  credentialId       String
+  createdById        String
+  expiresAt          DateTime
+  revokedAt          DateTime?
+  revokedById        String?
+  maxViews           Int?
+  viewCount          Int                 @default(0)
+  lastViewedAt       DateTime?
+  disclosedClaims    String[]            @default([])
+  includeHolderName  Boolean             @default(false)
+  includeReferenceNo Boolean             @default(false)
+  credential         Credential          @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  createdBy          User                @relation("ShareLinkCreator", fields: [createdById], references: [id])
+  revokedBy          User?               @relation("ShareLinkRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  verificationEvents VerificationEvent[]
+  createdAt          DateTime            @default(now())
 
   @@index([credentialId, createdAt])
   @@index([revokedById])
+  @@index([createdById, createdAt])
+}
+
+model VerificationEvent {
+  id                         String               @id @default(cuid())
+  verifierId                 String?
+  credentialId               String?
+  organizationId             String?
+  shareLinkId                String?
+  verificationRequestId      String?
+  method                     VerificationMethod
+  result                     VerificationOutcome
+  credentialPublicIdSnapshot String?
+  ipAddress                  String?
+  userAgent                  String?
+  createdAt                  DateTime             @default(now())
+  verifier                   User?                @relation("VerificationActor", fields: [verifierId], references: [id], onDelete: SetNull)
+  credential                 Credential?          @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  organization               Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  shareLink                  ShareLink?           @relation(fields: [shareLinkId], references: [id], onDelete: SetNull)
+  verificationRequest        VerificationRequest? @relation(fields: [verificationRequestId], references: [id], onDelete: SetNull)
+  fraudAlerts                FraudAlert[]
+
+  @@index([verifierId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([credentialId, createdAt])
+  @@index([result, createdAt])
+  @@index([method, createdAt])
+  @@index([ipAddress, createdAt])
+}
+
+model VerificationRequest {
+  id                 String                    @id @default(cuid())
+  credentialId       String
+  organizationId     String
+  holderId           String
+  requestedById      String
+  status             VerificationRequestStatus @default(PENDING)
+  requesterNote      String?
+  reviewedById       String?
+  reviewedAt         DateTime?
+  reviewNote         String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  credential         Credential                @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  organization       Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  holder             User                      @relation("VerificationHolder", fields: [holderId], references: [id])
+  requestedBy        User                      @relation("VerificationRequester", fields: [requestedById], references: [id])
+  reviewedBy         User?                     @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  verificationEvents VerificationEvent[]
+
+  @@index([holderId, status, createdAt])
+  @@index([organizationId, status, createdAt])
+  @@index([requestedById, createdAt])
+  @@index([status, createdAt])
+}
+
+model SavedOrganization {
+  id             String       @id @default(cuid())
+  verifierId     String
+  organizationId String
+  createdAt      DateTime     @default(now())
+  verifier       User         @relation(fields: [verifierId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([verifierId, organizationId])
+  @@index([verifierId, createdAt])
+}
+
+model OrganizationDocument {
+  id               String                   @id @default(cuid())
+  organizationId   String
+  documentType     OrganizationDocumentType
+  originalFileName String
+  mimeType         String
+  sizeBytes        Int
+  storageProvider  String
+  storagePath      String
+  checksumSha256   String?
+  status           DocumentUploadStatus     @default(PENDING_UPLOAD)
+  uploadedById     String
+  reviewedById     String?
+  uploadedAt       DateTime?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy       User                     @relation("OrgDocumentUploader", fields: [uploadedById], references: [id])
+  reviewedBy       User?                    @relation("OrgDocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+model CredentialArtifact {
+  id               String     @id @default(cuid())
+  credentialId     String
+  originalFileName String
+  mimeType         String
+  sizeBytes        Int
+  storagePath      String
+  checksumSha256   String
+  uploadedById     String
+  completedAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  credential       Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  uploadedBy       User       @relation(fields: [uploadedById], references: [id])
+
+  @@unique([checksumSha256])
+  @@index([credentialId])
+}
+
+model PersonalDocument {
+  id               String    @id @default(cuid())
+  holderId         String
+  title            String
+  documentType     String
+  originalFileName String
+  mimeType         String
+  sizeBytes        Int
+  storagePath      String
+  checksumSha256   String?
+  uploadedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  holder           User      @relation(fields: [holderId], references: [id], onDelete: Cascade)
+
+  @@index([holderId, createdAt])
+}
+
+model VerificationUpload {
+  id               String    @id @default(cuid())
+  verifierId       String
+  storagePath      String
+  originalFileName String
+  mimeType         String
+  sizeBytes        Int
+  checksumSha256   String?
+  expiresAt        DateTime
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  verifier         User      @relation(fields: [verifierId], references: [id], onDelete: Cascade)
+
+  @@index([verifierId, createdAt])
+  @@index([expiresAt])
+  @@index([checksumSha256])
+}
+
+model FraudAlert {
+  id                  String             @id @default(cuid())
+  type                FraudAlertType
+  severity            FraudAlertSeverity
+  status              FraudAlertStatus   @default(OPEN)
+  title               String
+  description         String
+  credentialId        String?
+  verificationEventId String?
+  actorId             String?
+  ipAddress           String?
+  occurrenceCount     Int                @default(1)
+  metadata            Json?
+  firstSeenAt         DateTime           @default(now())
+  lastSeenAt          DateTime           @default(now())
+  resolvedAt          DateTime?
+  resolvedById        String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  credential          Credential?        @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  verificationEvent   VerificationEvent? @relation(fields: [verificationEventId], references: [id], onDelete: SetNull)
+  actor               User?              @relation("FraudAlertActor", fields: [actorId], references: [id], onDelete: SetNull)
+  resolvedBy          User?              @relation("FraudAlertResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, severity, lastSeenAt])
+  @@index([type, status])
+  @@index([actorId, lastSeenAt])
+  @@index([ipAddress, lastSeenAt])
+}
+
+model Notification {
+  id           String           @id @default(cuid())
+  userId       String
+  type         NotificationType
+  title        String
+  message      String
+  resourceType String?
+  resourceId   String?
+  readAt       DateTime?
+  createdAt    DateTime         @default(now())
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }
 
 model AuditLog {

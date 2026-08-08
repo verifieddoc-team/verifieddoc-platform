@@ -418,6 +418,124 @@ describe("Credential sharing and public verification", () => {
     expect(JSON.stringify(auditEntry?.details ?? {})).not.toMatch(/tokenHash/i);
   });
 
+  it("records a VerificationEvent for successful public verification", async () => {
+    const { holder, credentialId } = await setupHolderCredential(app);
+    const createResponse = await createShareLinkRequest(app, credentialId, holder.accessToken);
+    const rawToken = createResponse.body.token as string;
+
+    const verifyResponse = await verifyShareTokenRequest(app, rawToken);
+    expect(verifyResponse.status).toBe(200);
+    expect(verifyResponse.body.result).toBe("VALID");
+
+    const event = await prisma.verificationEvent.findFirst({
+      where: {
+        shareLinkId: createResponse.body.shareLink.id,
+        method: "SHARE_TOKEN"
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    expect(event).not.toBeNull();
+    expect(event?.result).toBe("VERIFIED");
+    expect(event?.verifierId).toBeNull();
+    expect(JSON.stringify(event)).not.toContain(rawToken);
+
+    const notification = await prisma.notification.findFirst({
+      where: {
+        userId: holder.user.id,
+        type: "SHARE_LINK_USED"
+      }
+    });
+    expect(notification).not.toBeNull();
+  });
+
+  it("performs public share-token verification immediately without Platform Admin approval", async () => {
+    const { holder, credentialId } = await setupHolderCredential(app);
+    const createResponse = await createShareLinkRequest(app, credentialId, holder.accessToken);
+    const rawToken = createResponse.body.token as string;
+
+    const pendingAdminReviews = await prisma.organization.count({
+      where: {
+        status: "PENDING",
+        credentials: { some: { id: credentialId } }
+      }
+    });
+    // Credential issuance already requires a verified issuer org; public verify still
+    // must not wait on a Platform Admin decision for the verification event itself.
+    expect(pendingAdminReviews).toBe(0);
+
+    const verifyResponse = await verifyShareTokenRequest(app, rawToken);
+    expect(verifyResponse.status).toBe(200);
+    expect(verifyResponse.body.result).toBe("VALID");
+    expect(verifyResponse.body.error).toBeUndefined();
+  });
+
+  it("records VerificationEvents for unavailable share links before 404", async () => {
+    const unknownResponse = await verifyShareTokenRequest(app, `unknown-${randomUUID()}`);
+    expect(unknownResponse.status).toBe(404);
+    expect(unknownResponse.body.error.code).toBe("VERIFICATION_UNAVAILABLE");
+
+    const notFoundEvent = await prisma.verificationEvent.findFirst({
+      where: { result: "NOT_FOUND", method: "SHARE_TOKEN", shareLinkId: null },
+      orderBy: { createdAt: "desc" }
+    });
+    expect(notFoundEvent).not.toBeNull();
+
+    const { holder, credentialId } = await setupHolderCredential(app);
+    const createResponse = await createShareLinkRequest(app, credentialId, holder.accessToken, {
+      expiresInHours: 1
+    });
+    const rawToken = createResponse.body.token as string;
+
+    await prisma.shareLink.update({
+      where: { id: createResponse.body.shareLink.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) }
+    });
+
+    const expiredResponse = await verifyShareTokenRequest(app, rawToken);
+    expect(expiredResponse.status).toBe(404);
+
+    const expiredEvent = await prisma.verificationEvent.findFirst({
+      where: {
+        shareLinkId: createResponse.body.shareLink.id,
+        result: "EXPIRED"
+      }
+    });
+    expect(expiredEvent).not.toBeNull();
+  });
+
+  it("records REVOKED event and fraud alert when verifying a revoked credential via share link", async () => {
+    const { admin, organizationId, holder, credentialId } = await setupHolderCredential(app);
+    const createResponse = await createShareLinkRequest(app, credentialId, holder.accessToken);
+    const rawToken = createResponse.body.token as string;
+
+    await request(app)
+      .patch(`/api/v1/organizations/${organizationId}/credentials/${credentialId}/revoke`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ reason: "Fictional revocation for verification event test." });
+
+    const response = await verifyShareTokenRequest(app, rawToken);
+    expect(response.status).toBe(200);
+    expect(response.body.result).toBe("REVOKED");
+
+    const event = await prisma.verificationEvent.findFirst({
+      where: {
+        shareLinkId: createResponse.body.shareLink.id,
+        result: "REVOKED"
+      }
+    });
+    expect(event).not.toBeNull();
+
+    const alert = await prisma.fraudAlert.findFirst({
+      where: {
+        type: "REVOKED_CREDENTIAL_ACCESS",
+        credentialId,
+        verificationEventId: event?.id
+      }
+    });
+    expect(alert).not.toBeNull();
+  });
+
   it("prevents another holder from revoking share links on a foreign credential", async () => {
     const { holder, credentialId } = await setupHolderCredential(app);
     const otherHolder = await registerHolder(app);

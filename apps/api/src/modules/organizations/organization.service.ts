@@ -1,5 +1,6 @@
-import { OrganizationRole, OrganizationStatus } from "@prisma/client";
+import { NotificationType, OrganizationRole, OrganizationStatus } from "@prisma/client";
 import { AppError } from "../../lib/errors.js";
+import { createNotification } from "../../lib/notifications.js";
 import {
   buildPaginationMetadata,
   toAdminOrganization,
@@ -9,10 +10,16 @@ import {
   type PaginatedResult,
   type PublicOrganization
 } from "../../lib/organizations.js";
+import { normalizePhoneE164 } from "../../lib/phone.js";
 import { isUniqueConstraintError } from "../../lib/prisma-errors.js";
 import { prisma } from "../../lib/prisma.js";
 import { toPublicUser } from "../../lib/users.js";
-import type { AdminOrganizationListQuery, CreateOrganizationInput, ReviewOrganizationInput } from "./organization.schemas.js";
+import type {
+  AdminOrganizationListQuery,
+  CreateOrganizationInput,
+  ReviewOrganizationInput,
+  UpdateOrganizationInput
+} from "./organization.schemas.js";
 
 class OrganizationReviewClaimError extends Error {
   constructor() {
@@ -56,6 +63,10 @@ export async function applyForOrganization(
           contactEmail: input.contactEmail,
           country: input.country,
           description: input.description,
+          industry: input.industry ?? null,
+          hrContactName: input.hrContactName ?? null,
+          hrContactEmail: null,
+          hrContactPhone: null,
           status: OrganizationStatus.PENDING
         }
       });
@@ -136,9 +147,13 @@ export async function listOrganizationMembers(organizationId: string): Promise<O
         select: {
           id: true,
           email: true,
+          fullName: true,
           firstName: true,
           lastName: true,
+          phone: true,
           role: true,
+          status: true,
+          emailVerifiedAt: true,
           createdAt: true,
           updatedAt: true
         }
@@ -152,6 +167,66 @@ export async function listOrganizationMembers(organizationId: string): Promise<O
     membershipRole: member.role,
     joinedAt: member.createdAt
   }));
+}
+
+export async function updateOrganizationProfile(
+  organizationId: string,
+  input: UpdateOrganizationInput,
+  actorId: string,
+  context: { ipAddress?: string; userAgent?: string } = {}
+): Promise<PublicOrganization> {
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { id: true }
+  });
+
+  if (!organization) {
+    throw new AppError(404, "NOT_FOUND", "Organization not found");
+  }
+
+  let hrContactPhone: string | null | undefined = input.hrContactPhone;
+  if (typeof hrContactPhone === "string") {
+    hrContactPhone = normalizePhoneE164(hrContactPhone);
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const next = await tx.organization.update({
+      where: { id: organizationId },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.registrationNumber !== undefined
+          ? { registrationNumber: input.registrationNumber }
+          : {}),
+        ...(input.website !== undefined ? { website: input.website } : {}),
+        ...(input.contactEmail !== undefined ? { contactEmail: input.contactEmail } : {}),
+        ...(input.country !== undefined ? { country: input.country } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.industry !== undefined ? { industry: input.industry } : {}),
+        ...(input.hrContactName !== undefined ? { hrContactName: input.hrContactName } : {}),
+        ...(input.hrContactEmail !== undefined ? { hrContactEmail: input.hrContactEmail } : {}),
+        ...(hrContactPhone !== undefined ? { hrContactPhone } : {})
+      }
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        organizationId,
+        action: "ORGANIZATION_UPDATED",
+        resourceType: "Organization",
+        resourceId: organizationId,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        details: {
+          updatedFields: Object.keys(input)
+        }
+      }
+    });
+
+    return next;
+  });
+
+  return toPublicOrganization(updated);
 }
 
 export async function listOrganizationsForAdmin(
@@ -220,9 +295,43 @@ export async function reviewOrganization(
         }
       });
 
-      return tx.organization.findUniqueOrThrow({
+      const organization = await tx.organization.findUniqueOrThrow({
         where: { id: organizationId }
       });
+
+      const admins = await tx.organizationMember.findMany({
+        where: {
+          organizationId,
+          role: OrganizationRole.ORGANIZATION_ADMIN
+        },
+        select: { userId: true }
+      });
+
+      const notificationType =
+        input.decision === "APPROVE"
+          ? NotificationType.ORGANIZATION_APPROVED
+          : NotificationType.ORGANIZATION_REJECTED;
+      const title =
+        input.decision === "APPROVE" ? "Organization approved" : "Organization rejected";
+      const message =
+        input.decision === "APPROVE"
+          ? `${organization.name} has been verified and can now issue credentials.`
+          : `${organization.name} was rejected${
+              input.rejectionReason ? `: ${input.rejectionReason}` : "."
+            }`;
+
+      for (const admin of admins) {
+        await createNotification(tx, {
+          userId: admin.userId,
+          type: notificationType,
+          title,
+          message,
+          resourceType: "Organization",
+          resourceId: organizationId
+        });
+      }
+
+      return organization;
     });
 
     return toAdminOrganization(reviewedOrganization);

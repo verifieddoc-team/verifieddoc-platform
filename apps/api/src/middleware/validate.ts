@@ -1,14 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
-import type { ZodType } from "zod";
+import type { ZodTypeAny } from "zod";
 
-export function validateBody<T>(schema: ZodType<T>) {
+export function validateBody(schema: ZodTypeAny) {
   return (req: Request, _res: Response, next: NextFunction) => {
     req.body = schema.parse(req.body);
     next();
   };
 }
 
-export function validateQuery<T>(schema: ZodType<T>) {
+export function validateQuery(schema: ZodTypeAny) {
   return (req: Request, _res: Response, next: NextFunction) => {
     req.validatedQuery = schema.parse(req.query);
     next();

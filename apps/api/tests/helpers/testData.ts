@@ -1,9 +1,11 @@
 ﻿import { randomUUID } from "node:crypto";
-import { OrganizationRole, PlatformRole, type User } from "@prisma/client";
+import { OrganizationRole, PlatformRole, Prisma, type User } from "@prisma/client";
 import type { Express } from "express";
 import request from "supertest";
+import { joinNames } from "../../src/lib/names.js";
 import { prisma } from "../../src/lib/prisma.js";
 import { createAccessToken } from "../../src/lib/tokens.js";
+import { clearMemoryStorage } from "../../src/services/storage/index.js";
 
 export const TEST_PASSWORD = "TestPass1!";
 export const TEST_PASSWORD_HASH =
@@ -13,6 +15,10 @@ export const TEST_ORG_SLUG_PREFIX = "test-org";
 
 const testUserEmailFilter = {
   endsWith: `@${TEST_EMAIL_DOMAIN}`
+};
+
+const testUserRelationFilter = {
+  email: testUserEmailFilter
 };
 
 const testOrganizationFilter = {
@@ -75,13 +81,17 @@ export async function createTestUser(
   const lastName = overrides.lastName ?? "User";
   const role = overrides.role ?? PlatformRole.HOLDER;
 
+  const names = joinNames(firstName, lastName);
   const user = await prisma.user.create({
     data: {
       email,
       passwordHash: TEST_PASSWORD_HASH,
-      firstName,
-      lastName,
-      role
+      firstName: names.firstName,
+      lastName: names.lastName,
+      fullName: names.fullName,
+      role,
+      // Test fixtures represent already-verified accounts.
+      emailVerifiedAt: new Date()
     }
   });
 
@@ -102,44 +112,91 @@ export async function createTestUser(
   };
 }
 
-export async function cleanupTestOrganizations() {
+async function cleanupVerificationGraphForUsers() {
+  await prisma.fraudAlert.deleteMany({
+    where: {
+      OR: [
+        { actor: testUserRelationFilter },
+        { resolvedBy: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } },
+        { verificationEvent: { verifier: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.notification.deleteMany({
+    where: { user: testUserRelationFilter }
+  });
+
+  await prisma.verificationEvent.deleteMany({
+    where: {
+      OR: [
+        { verifier: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } },
+        { shareLink: { createdBy: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.verificationUpload.deleteMany({
+    where: { verifier: testUserRelationFilter }
+  });
+
+  await prisma.personalDocument.deleteMany({
+    where: { holder: testUserRelationFilter }
+  });
+
+  await prisma.credentialArtifact.deleteMany({
+    where: {
+      OR: [
+        { uploadedBy: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.verificationRequest.deleteMany({
+    where: {
+      OR: [
+        { requestedBy: testUserRelationFilter },
+        { holder: testUserRelationFilter },
+        { reviewedBy: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } }
+      ]
+    }
+  });
+
+  await prisma.savedOrganization.deleteMany({
+    where: { verifier: testUserRelationFilter }
+  });
+}
+
+async function cleanupTestUserDependencies() {
+  await cleanupVerificationGraphForUsers();
+
   await prisma.shareLink.deleteMany({
     where: {
-      credential: {
-        organization: testOrganizationFilter
-      }
+      OR: [
+        { createdBy: testUserRelationFilter },
+        { revokedBy: testUserRelationFilter },
+        { credential: { holder: testUserRelationFilter } },
+        { credential: { issuedBy: testUserRelationFilter } },
+        { credential: { revokedBy: testUserRelationFilter } }
+      ]
     }
   });
 
   await prisma.credential.deleteMany({
     where: {
-      organization: testOrganizationFilter
-    }
-  });
-
-  await prisma.organizationInvitation.deleteMany({
-    where: {
-      organization: testOrganizationFilter
-    }
-  });
-
-  await prisma.organizationMember.deleteMany({
-    where: {
-      organization: testOrganizationFilter
-    }
-  });
-
-  await prisma.organization.deleteMany({
-    where: testOrganizationFilter
-  });
-}
-
-export async function cleanupTestUsers() {
-  await prisma.auditLog.deleteMany({
-    where: {
-      actor: {
-        email: testUserEmailFilter
-      }
+      OR: [
+        { holder: testUserRelationFilter },
+        { issuedBy: testUserRelationFilter },
+        { revokedBy: testUserRelationFilter }
+      ]
     }
   });
 
@@ -147,12 +204,165 @@ export async function cleanupTestUsers() {
     where: {
       OR: [
         { email: testUserEmailFilter },
-        { invitedBy: { email: testUserEmailFilter } },
-        { acceptedBy: { email: testUserEmailFilter } },
-        { revokedBy: { email: testUserEmailFilter } }
+        { invitedBy: testUserRelationFilter },
+        { acceptedBy: testUserRelationFilter },
+        { revokedBy: testUserRelationFilter }
       ]
     }
   });
+
+  await prisma.recipientInvitation.deleteMany({
+    where: {
+      OR: [
+        { email: testUserEmailFilter },
+        { invitedBy: testUserRelationFilter },
+        { acceptedBy: testUserRelationFilter },
+        { revokedBy: testUserRelationFilter }
+      ]
+    }
+  });
+
+  await prisma.organizationRecipient.deleteMany({
+    where: {
+      user: testUserRelationFilter
+    }
+  });
+
+  await prisma.organizationDocument.deleteMany({
+    where: {
+      OR: [
+        { uploadedBy: testUserRelationFilter },
+        { reviewedBy: testUserRelationFilter }
+      ]
+    }
+  });
+
+  await prisma.auditLog.deleteMany({
+    where: {
+      actor: testUserRelationFilter
+    }
+  });
+
+  await prisma.organizationMember.deleteMany({
+    where: {
+      user: testUserRelationFilter
+    }
+  });
+}
+
+const organizationCleanupFilter = {
+  OR: [
+    testOrganizationFilter,
+    // Organizations created via older registration flows may use slugified company names.
+    { members: { some: { user: testUserRelationFilter } } },
+    { contactEmail: testUserEmailFilter }
+  ]
+};
+
+async function cleanupOrganizationsMatching(where: Prisma.OrganizationWhereInput) {
+  await prisma.fraudAlert.deleteMany({
+    where: {
+      OR: [
+        { credential: { organization: where } },
+        { verificationEvent: { organization: where } }
+      ]
+    }
+  });
+
+  await prisma.verificationEvent.deleteMany({
+    where: {
+      OR: [
+        { organization: where },
+        { credential: { organization: where } }
+      ]
+    }
+  });
+
+  await prisma.credentialArtifact.deleteMany({
+    where: {
+      credential: { organization: where }
+    }
+  });
+
+  await prisma.verificationRequest.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.savedOrganization.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.organizationDocument.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.organizationRecipient.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.recipientInvitation.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.shareLink.deleteMany({
+    where: {
+      credential: {
+        organization: where
+      }
+    }
+  });
+
+  await prisma.credential.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.organizationInvitation.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.auditLog.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.organizationMember.deleteMany({
+    where: {
+      organization: where
+    }
+  });
+
+  await prisma.organization.deleteMany({
+    where
+  });
+}
+
+export async function cleanupTestOrganizations() {
+  await cleanupOrganizationsMatching(organizationCleanupFilter);
+
+  // Registration tests can leave orphan PENDING orgs after their users are deleted
+  // (members cascade away; contactEmail may not use @example.test).
+  await cleanupOrganizationsMatching({
+    OR: [{ members: { none: {} } }]
+  });
+}
+
+export async function cleanupTestUsers() {
+  await cleanupTestUserDependencies();
 
   await prisma.user.deleteMany({
     where: {
@@ -162,6 +372,37 @@ export async function cleanupTestUsers() {
 }
 
 export async function cleanupTestData() {
+  clearMemoryStorage();
+
+  // Public verify NOT_FOUND events / standalone fraud alerts have no user/org FKs.
+  await prisma.fraudAlert.deleteMany({
+    where: {
+      OR: [
+        {
+          verificationEvent: {
+            verifierId: null,
+            credentialId: null,
+            organizationId: null,
+            shareLinkId: null
+          }
+        },
+        {
+          actorId: null,
+          credentialId: null,
+          verificationEventId: null
+        }
+      ]
+    }
+  });
+  await prisma.verificationEvent.deleteMany({
+    where: {
+      verifierId: null,
+      credentialId: null,
+      organizationId: null,
+      shareLinkId: null
+    }
+  });
+
   await cleanupTestOrganizations();
   await cleanupTestUsers();
 }
@@ -171,14 +412,67 @@ export async function disconnectTestDatabase() {
 }
 
 export async function registerAndAuthenticate(app: Express, overrides: Record<string, unknown> = {}) {
+  const { getTestOtpForRequest } = await import("../../src/services/email/index.js");
   const payload = createRegisterPayload(overrides);
-  const response = await request(app).post("/api/v1/auth/register").send(payload);
+  const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+
+  if (registerResponse.status !== 201) {
+    throw new Error(
+      `registerAndAuthenticate failed: ${registerResponse.status} ${JSON.stringify(registerResponse.body)}`
+    );
+  }
+
+  if (registerResponse.body.verificationRequired) {
+    const requestId = registerResponse.body.verificationRequestId as string;
+    const otp = getTestOtpForRequest(requestId);
+    if (!otp) {
+      throw new Error(`Missing verification OTP for request ${requestId}`);
+    }
+
+    const verifyResponse = await request(app)
+      .post("/api/v1/auth/email-verification/verify")
+      .send({ requestId, otp });
+
+    if (verifyResponse.status !== 200) {
+      throw new Error(
+        `email verification failed: ${verifyResponse.status} ${JSON.stringify(verifyResponse.body)}`
+      );
+    }
+
+    return {
+      payload,
+      user: verifyResponse.body.user,
+      accessToken: verifyResponse.body.accessToken as string,
+      refreshToken: verifyResponse.body.refreshToken as string
+    };
+  }
 
   return {
     payload,
-    user: response.body.user,
-    accessToken: response.body.accessToken as string
+    user: registerResponse.body.user,
+    accessToken: registerResponse.body.accessToken as string,
+    refreshToken: registerResponse.body.refreshToken as string
   };
+}
+
+/** Register then complete signup OTP verification; returns the AuthSession body. */
+export async function registerVerifyAndGetSession(
+  app: Express,
+  payload: Record<string, unknown>
+) {
+  const { getTestOtpForRequest } = await import("../../src/services/email/index.js");
+  const registerResponse = await request(app).post("/api/v1/auth/register").send(payload);
+  if (registerResponse.status !== 201 || !registerResponse.body.verificationRequired) {
+    return registerResponse;
+  }
+
+  const requestId = registerResponse.body.verificationRequestId as string;
+  const otp = getTestOtpForRequest(requestId);
+  const verifyResponse = await request(app)
+    .post("/api/v1/auth/email-verification/verify")
+    .send({ requestId, otp });
+
+  return verifyResponse;
 }
 
 export async function loginAndGetAccessToken(app: Express, email: string, password = TEST_PASSWORD) {

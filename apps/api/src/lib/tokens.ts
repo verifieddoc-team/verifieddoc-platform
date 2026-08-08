@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { PlatformRole } from "@prisma/client";
 import { env } from "../config/env.js";
@@ -16,6 +16,29 @@ export interface AccessTokenPayload {
 
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+/** Peppered hash for password-reset OTP and reset tokens (uses PASSWORD_RESET_SECRET). */
+export function hashPasswordResetSecret(value: string): string {
+  return createHmac("sha256", env.PASSWORD_RESET_SECRET).update(value).digest("hex");
+}
+
+/** Peppered hash for signup email-verification OTPs (uses EMAIL_VERIFICATION_SECRET). */
+export function hashEmailVerificationSecret(value: string): string {
+  return createHmac("sha256", env.EMAIL_VERIFICATION_SECRET).update(value).digest("hex");
+}
+
+export function safeEqualHex(left: string, right: string): boolean {
+  try {
+    const leftBuf = Buffer.from(left, "hex");
+    const rightBuf = Buffer.from(right, "hex");
+    if (leftBuf.length === 0 || leftBuf.length !== rightBuf.length) {
+      return false;
+    }
+    return timingSafeEqual(leftBuf, rightBuf);
+  } catch {
+    return false;
+  }
 }
 
 export function generateRefreshToken(): string {

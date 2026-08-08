@@ -6,10 +6,17 @@ import {
   useState,
 } from "react";
 import type {
+  AdminOrganization,
   AuthSession,
   CredentialStatus,
+  HolderDashboardResponse,
+  HolderCredentialSummary,
+  InvitationSummary,
   Organization,
+  OrganizationMemberProfile,
+  OrganizationMembershipView,
   PublicVerificationResponse,
+  SafeAuditLogEntry,
   SafeCredential,
   ShareLinkSummary,
 } from "@verifieddoc/contracts";
@@ -27,7 +34,9 @@ import {
 import {
   DemoRole,
   formatDate,
+  hasOrganizationWorkspaceAccess,
   navigate,
+  routeForPlatformRole,
   routeForRole,
 } from "./lib/navigation";
 
@@ -483,6 +492,7 @@ function AppShell({
   onActive,
   onExit,
   children,
+  workspaceSwitch,
 }: {
   roleLabel: string;
   name: string;
@@ -492,13 +502,17 @@ function AppShell({
   onActive: (id: string) => void;
   onExit: () => void;
   children: ReactNode;
+  workspaceSwitch?: { label: string; onClick: () => void };
 }) {
   const [navOpen, setNavOpen] = useState(false);
   return (
     <div className="app-frame">
       <aside className={navOpen ? "app-sidebar sidebar-open" : "app-sidebar"}>
         <Brand compact />
-        <div className="workspace-role"><span>Demo workspace</span><strong>{roleLabel}</strong></div>
+        <div className="workspace-role">
+          <span>{demoMode ? "Demo workspace" : "Live workspace"}</span>
+          <strong>{roleLabel}</strong>
+        </div>
         <nav aria-label={`${roleLabel} navigation`}>
           {items.map((item) => (
             <button
@@ -514,6 +528,11 @@ function AppShell({
             </button>
           ))}
         </nav>
+        {workspaceSwitch && (
+          <button className="sidebar-exit" type="button" onClick={workspaceSwitch.onClick}>
+            {workspaceSwitch.label}
+          </button>
+        )}
         <button className="sidebar-exit" type="button" onClick={onExit}>← Exit workspace</button>
         <div className="sidebar-user">
           <span>{name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
@@ -523,7 +542,10 @@ function AppShell({
       <div className="workspace-main">
         <header className="workspace-topbar">
           <button className="sidebar-toggle" type="button" onClick={() => setNavOpen((value) => !value)}>☰ <span className="sr-only">Toggle workspace navigation</span></button>
-          <div><span className="demo-dot" />Fictional demo data</div>
+          <div>
+            <span className="demo-dot" />
+            {demoMode ? "Fictional demo data" : "API-backed session"}
+          </div>
           <button type="button" onClick={onExit}>Sign out</button>
         </header>
         {children}
@@ -559,44 +581,210 @@ function MetricCard({ label, value, note, tone = "navy" }: { label: string; valu
   );
 }
 
-function HolderWorkspace({ onExit }: { onExit: () => void }) {
+function HolderWorkspace({
+  onExit,
+  session,
+  canOpenOrganization,
+}: {
+  onExit: () => void;
+  session: AuthSession | null;
+  canOpenOrganization: boolean;
+}) {
+  const live = !demoMode && Boolean(session);
   const [active, setActive] = useState("wallet");
-  const [selected, setSelected] = useState<SafeCredential>(demoCredentials[0]!);
+  const [wallet, setWallet] = useState<HolderCredentialSummary[]>(
+    demoCredentials.map((credential) => ({
+      id: credential.id,
+      publicId: credential.publicId,
+      title: credential.title,
+      credentialType: credential.credentialType,
+      claims: credential.claims,
+      organization: {
+        name: credential.organization.name,
+        slug: credential.organization.slug,
+      },
+      issuedAt: credential.issuedAt,
+      expiresAt: credential.expiresAt,
+      status: credential.status,
+      effectiveStatus: credential.effectiveStatus,
+    })),
+  );
+  const [selected, setSelected] = useState<SafeCredential | null>(demoCredentials[0]!);
+  const [dashboard, setDashboard] = useState<HolderDashboardResponse | null>(null);
   const [shareLinks, setShareLinks] = useState(demoShareLinks);
   const [rawShareUrl, setRawShareUrl] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  function createShare(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const created: ShareLinkSummary = {
-      id: `share_demo_${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
-      revokedAt: null,
-      maxViews: 10,
-      viewCount: 0,
-      lastViewedAt: null,
-      disclosedClaims: ["grade", "cohort"],
-      includeHolderName: true,
-      includeReferenceNo: false,
-      state: "ACTIVE",
-      verificationUrl:
-        "https://verifieddoc.example.test/verify/DEMO-VERIFIED-2026",
+  useEffect(() => {
+    if (!live || !session) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [dashboardResponse, walletResponse] = await Promise.all([
+          api.getHolderDashboard(session.accessToken),
+          api.listWallet(session.accessToken),
+        ]);
+        if (cancelled) return;
+        setDashboard(dashboardResponse);
+        setWallet(walletResponse.data);
+        if (walletResponse.data[0]) {
+          const detail = await api.getCredential(
+            session.accessToken,
+            walletResponse.data[0].id,
+          );
+          if (!cancelled) setSelected(detail.credential);
+        } else {
+          setSelected(null);
+        }
+      } catch (caught) {
+        if (!cancelled) {
+          setNotice({
+            tone: "warning",
+            message:
+              caught instanceof ApiError
+                ? caught.message
+                : "Unable to load holder dashboard from the API.",
+          });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-    setShareLinks((current) => [created, ...current]);
-    setRawShareUrl(created.verificationUrl!);
-    setNotice({ tone: "success", message: "Share link created. The raw token is shown once." });
+  }, [live, session]);
+
+  useEffect(() => {
+    if (!live || !session || !selected) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await api.listShareLinks(session.accessToken, selected.id);
+        if (!cancelled) setShareLinks(response.data);
+      } catch {
+        if (!cancelled) setShareLinks([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [live, session, selected?.id]);
+
+  async function openCredential(credentialId: string) {
+    if (!live || !session) {
+      const demo = demoCredentials.find((item) => item.id === credentialId);
+      if (demo) {
+        setSelected(demo);
+        setActive("details");
+      }
+      return;
+    }
+    try {
+      const detail = await api.getCredential(session.accessToken, credentialId);
+      setSelected(detail.credential);
+      setActive("details");
+    } catch (caught) {
+      setNotice({
+        tone: "warning",
+        message:
+          caught instanceof ApiError
+            ? caught.message
+            : "Unable to load credential detail.",
+      });
+    }
   }
 
-  function revokeShare(id: string) {
-    setShareLinks((links) =>
-      links.map((link) =>
-        link.id === id
-          ? { ...link, state: "REVOKED", revokedAt: new Date().toISOString() }
-          : link,
-      ),
+  async function createShare(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    const form = new FormData(event.currentTarget);
+    const expiresInHours = Number(form.get("expiresInHours") || 72);
+    const maxViews = Number(form.get("maxViews") || 10);
+    const includeHolderName = Boolean(form.get("includeHolderName"));
+    const includeReferenceNo = Boolean(form.get("includeReferenceNo"));
+    const disclosedClaims = Object.keys(selected.claims ?? {}).filter((claim) =>
+      Boolean(form.get(`claim_${claim}`)),
     );
-    setNotice({ tone: "info", message: "Share link revoked." });
+
+    if (!live || !session) {
+      const created: ShareLinkSummary = {
+        id: `share_demo_${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString(),
+        revokedAt: null,
+        maxViews,
+        viewCount: 0,
+        lastViewedAt: null,
+        disclosedClaims,
+        includeHolderName,
+        includeReferenceNo,
+        state: "ACTIVE",
+        verificationUrl:
+          "https://verifieddoc.example.test/verify/DEMO-VERIFIED-2026",
+      };
+      setShareLinks((current) => [created, ...current]);
+      setRawShareUrl(created.verificationUrl!);
+      setNotice({ tone: "success", message: "Share link created. The raw token is shown once." });
+      return;
+    }
+
+    try {
+      const created = await api.createShareLink(session.accessToken, selected.id, {
+        expiresInHours,
+        maxViews,
+        disclosedClaims,
+        includeHolderName,
+        includeReferenceNo,
+      });
+      setShareLinks((current) => [created.shareLink, ...current]);
+      setRawShareUrl(created.verificationUrl);
+      setNotice({ tone: "success", message: "Share link created. The raw token is shown once." });
+    } catch (caught) {
+      setNotice({
+        tone: "warning",
+        message:
+          caught instanceof ApiError
+            ? caught.message
+            : "Unable to create share link.",
+      });
+    }
+  }
+
+  async function revokeShare(id: string) {
+    if (!selected) return;
+    if (!live || !session) {
+      setShareLinks((links) =>
+        links.map((link) =>
+          link.id === id
+            ? { ...link, state: "REVOKED", revokedAt: new Date().toISOString() }
+            : link,
+        ),
+      );
+      setNotice({ tone: "info", message: "Share link revoked." });
+      return;
+    }
+    try {
+      const response = await api.revokeShareLink(
+        session.accessToken,
+        selected.id,
+        id,
+      );
+      setShareLinks((links) =>
+        links.map((link) => (link.id === id ? response.shareLink : link)),
+      );
+      setNotice({ tone: "info", message: "Share link revoked." });
+    } catch (caught) {
+      setNotice({
+        tone: "warning",
+        message:
+          caught instanceof ApiError
+            ? caught.message
+            : "Unable to revoke share link.",
+      });
+    }
   }
 
   const items = [
@@ -606,15 +794,41 @@ function HolderWorkspace({ onExit }: { onExit: () => void }) {
     { id: "profile", label: "Profile", icon: "○" },
   ];
 
+  const profile = live && session
+    ? session.user
+    : {
+        firstName: "Amara",
+        lastName: "N.",
+        email: "demo.holder@example.test",
+        role: "HOLDER" as const,
+      };
+
+  // Live mode waits for GET /holder/dashboard — never invent zeros for missing fields.
+  const liveStats = live ? dashboard?.stats ?? null : null;
+  const demoStats = {
+    total: wallet.length,
+    active: 1,
+    expired: 1,
+    revoked: 1,
+  };
+
   return (
     <AppShell
       roleLabel="Credential holder"
-      name="Amara N."
-      email="demo.holder@example.test"
+      name={`${profile.firstName} ${profile.lastName}`}
+      email={profile.email}
       items={items}
       active={active}
       onActive={setActive}
       onExit={onExit}
+      workspaceSwitch={
+        canOpenOrganization
+          ? {
+              label: "Open organization workspace →",
+              onClick: () => navigate("/app/organization"),
+            }
+          : undefined
+      }
     >
       <div className="workspace-content">
         {notice && <NoticeBar notice={notice} onClose={() => setNotice(null)} />}
@@ -622,22 +836,74 @@ function HolderWorkspace({ onExit }: { onExit: () => void }) {
           <>
             <PageHeader eyebrow="Holder workspace" title="Your credential wallet" copy="Every record remains connected to its issuing organization." />
             <div className="metric-grid">
-              <MetricCard label="Total credentials" value={demoCredentials.length} note="Across all issuing organizations" />
-              <MetricCard label="Active" value={1} note="Ready for consent sharing" tone="green" />
-              <MetricCard label="Expired" value={1} note="Kept for your record" tone="gold" />
-              <MetricCard label="Revoked" value={1} note="Issuer status preserved" tone="red" />
+              <MetricCard
+                label="Total Credentials"
+                value={live ? (liveStats?.total ?? "—") : demoStats.total}
+                note={live ? "stats.total from GET /holder/dashboard" : "Across all issuing organizations"}
+              />
+              <MetricCard
+                label="Active Credentials"
+                value={live ? (liveStats?.active ?? "—") : demoStats.active}
+                note="Ready for consent sharing"
+                tone="green"
+              />
+              <MetricCard
+                label="Expired Credentials"
+                value={live ? (liveStats?.expired ?? "—") : demoStats.expired}
+                note="Kept for your record"
+                tone="gold"
+              />
+              <MetricCard
+                label="Revoked Credentials"
+                value={live ? (liveStats?.revoked ?? "—") : demoStats.revoked}
+                note="Issuer status preserved"
+                tone="red"
+              />
             </div>
+            {live && (
+              <div className="content-card">
+                <div className="card-title-row">
+                  <div>
+                    <p>Recent Credentials</p>
+                    <h2>From holder dashboard</h2>
+                  </div>
+                  <span>
+                    {loading ? "Loading…" : "recentCredentials from GET /holder/dashboard"}
+                  </span>
+                </div>
+                <div className="credential-grid">
+                  {(dashboard?.recentCredentials ?? []).map((credential) => (
+                    <button
+                      type="button"
+                      className="wallet-card"
+                      key={`recent-${credential.id}`}
+                      onClick={() => {
+                        void openCredential(credential.id);
+                      }}
+                    >
+                      <div className="wallet-card-top"><span className="credential-symbol">VD</span><StatusBadge status={credential.effectiveStatus} /></div>
+                      <small>{credential.credentialType.replaceAll("_", " ")}</small>
+                      <h3>{credential.title}</h3>
+                      <p>{credential.organization.name}</p>
+                      <div><span>Issued {formatDate(credential.issuedAt)}</span><strong>View record →</strong></div>
+                    </button>
+                  ))}
+                  {!loading && !(dashboard?.recentCredentials?.length) && (
+                    <p>No recent credentials to show.</p>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="content-card">
-              <div className="card-title-row"><div><p>Credential records</p><h2>Your wallet</h2></div><span>Updated from issuer records</span></div>
+              <div className="card-title-row"><div><p>Credential records</p><h2>Your wallet</h2></div><span>{loading ? "Loading…" : live ? "GET /credentials" : "Updated from issuer records"}</span></div>
               <div className="credential-grid">
-                {demoCredentials.map((credential) => (
+                {wallet.map((credential) => (
                   <button
                     type="button"
                     className="wallet-card"
                     key={credential.id}
                     onClick={() => {
-                      setSelected(credential);
-                      setActive("details");
+                      void openCredential(credential.id);
                     }}
                   >
                     <div className="wallet-card-top"><span className="credential-symbol">VD</span><StatusBadge status={credential.effectiveStatus} /></div>
@@ -647,12 +913,15 @@ function HolderWorkspace({ onExit }: { onExit: () => void }) {
                     <div><span>Issued {formatDate(credential.issuedAt)}</span><strong>View record →</strong></div>
                   </button>
                 ))}
+                {!loading && wallet.length === 0 && (
+                  <p>No credentials in this wallet yet.</p>
+                )}
               </div>
             </div>
           </>
         )}
 
-        {active === "details" && (
+        {active === "details" && selected && (
           <>
             <PageHeader
               eyebrow="Credential detail"
@@ -696,11 +965,15 @@ function HolderWorkspace({ onExit }: { onExit: () => void }) {
           </>
         )}
 
-        {active === "sharing" && (
+        {active === "details" && !selected && (
+          <PageHeader eyebrow="Credential detail" title="No credential selected" copy="Open a record from your wallet." />
+        )}
+
+        {active === "sharing" && selected && (
           <>
             <PageHeader eyebrow="Consent sharing" title="Share this credential safely" copy="You decide what the verifier can see and how long access lasts." />
             <div className="two-column-form">
-              <form className="content-card form-card" onSubmit={createShare}>
+              <form className="content-card form-card" onSubmit={(event) => { void createShare(event); }}>
                 <div><p className="card-label">New share link</p><h2>{selected.title}</h2></div>
                 <label>Link duration
                   <select name="expiresInHours" defaultValue="72">
@@ -712,13 +985,13 @@ function HolderWorkspace({ onExit }: { onExit: () => void }) {
                 <label>Maximum views<input name="maxViews" type="number" min="1" max="100" defaultValue="10" /></label>
                 <fieldset>
                   <legend>Identity disclosure</legend>
-                  <label className="check-field"><input type="checkbox" defaultChecked /> Include holder name</label>
-                  <label className="check-field"><input type="checkbox" /> Include reference number</label>
+                  <label className="check-field"><input name="includeHolderName" type="checkbox" defaultChecked /> Include holder name</label>
+                  <label className="check-field"><input name="includeReferenceNo" type="checkbox" /> Include reference number</label>
                 </fieldset>
                 <fieldset>
                   <legend>Claims to disclose</legend>
                   {Object.keys(selected.claims ?? {}).map((claim) => (
-                    <label className="check-field" key={claim}><input type="checkbox" defaultChecked /> {claim}</label>
+                    <label className="check-field" key={claim}><input name={`claim_${claim}`} type="checkbox" defaultChecked /> {claim}</label>
                   ))}
                 </fieldset>
                 <button className="workspace-primary" type="submit">Create secure link</button>
@@ -736,7 +1009,7 @@ function HolderWorkspace({ onExit }: { onExit: () => void }) {
                   {shareLinks.map((link) => (
                     <article className="share-row" key={link.id}>
                       <div><StatusBadge status={link.state} /><h3>{formatDate(link.createdAt)}</h3><p>{link.viewCount} of {link.maxViews ?? "unlimited"} views used. Expires {formatDate(link.expiresAt)}.</p></div>
-                      {link.state === "ACTIVE" && <button type="button" onClick={() => revokeShare(link.id)}>Revoke</button>}
+                      {link.state === "ACTIVE" && <button type="button" onClick={() => { void revokeShare(link.id); }}>Revoke</button>}
                     </article>
                   ))}
                 </div>
@@ -748,10 +1021,10 @@ function HolderWorkspace({ onExit }: { onExit: () => void }) {
         {active === "profile" && (
           <>
             <PageHeader eyebrow="Account" title="Profile information" copy="Only basic account fields are shown. Credential sharing remains separate." />
-            <form className="content-card form-card narrow-card" onSubmit={(event) => { event.preventDefault(); setNotice({ tone: "success", message: "Demo profile updated." }); }}>
-              <div className="field-row"><label>First name<input defaultValue="Amara" /></label><label>Last name<input defaultValue="N." /></label></div>
-              <label>Email address<input value="demo.holder@example.test" readOnly /></label>
-              <label>Platform role<input value="HOLDER" readOnly /></label>
+            <form className="content-card form-card narrow-card" onSubmit={(event) => { event.preventDefault(); setNotice({ tone: "success", message: live ? "Profile fields are managed by the account API." : "Demo profile updated." }); }}>
+              <div className="field-row"><label>First name<input defaultValue={profile.firstName} readOnly={live} /></label><label>Last name<input defaultValue={profile.lastName} readOnly={live} /></label></div>
+              <label>Email address<input value={profile.email} readOnly /></label>
+              <label>Platform role<input value={profile.role} readOnly /></label>
               <button className="workspace-primary" type="submit">Save profile</button>
             </form>
           </>
@@ -761,11 +1034,22 @@ function HolderWorkspace({ onExit }: { onExit: () => void }) {
   );
 }
 
-function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
+function OrganizationWorkspace({
+  onExit,
+  session,
+  canOpenHolder,
+}: {
+  onExit: () => void;
+  session: AuthSession | null;
+  canOpenHolder: boolean;
+}) {
+  const live = !demoMode && Boolean(session);
   const [active, setActive] = useState("overview");
-  const [credentials, setCredentials] = useState(demoCredentials);
-  const [members, setMembers] = useState(demoMembers);
-  const [invitations, setInvitations] = useState(demoInvitations);
+  const [membership, setMembership] = useState<OrganizationMembershipView | null>(null);
+  const [credentials, setCredentials] = useState<SafeCredential[]>(demoCredentials);
+  const [members, setMembers] = useState<OrganizationMemberProfile[]>(demoMembers);
+  const [invitations, setInvitations] = useState<InvitationSummary[]>(demoInvitations);
+  const [auditLogs, setAuditLogs] = useState<SafeAuditLogEntry[]>(demoAuditLogs);
   const [notice, setNotice] = useState<Notice | null>(null);
   const items = [
     { id: "overview", label: "Overview", icon: "⌂" },
@@ -776,56 +1060,195 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
     { id: "audit", label: "Audit logs", icon: "≡" },
   ];
 
-  function issueCredential(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!live || !session) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const organizations = await api.listOrganizations(session.accessToken);
+        const first = organizations.organizations[0];
+        if (!first) {
+          if (!cancelled) {
+            setNotice({
+              tone: "warning",
+              message: "No organization memberships found for this account.",
+            });
+          }
+          return;
+        }
+        if (cancelled) return;
+        setMembership(first);
+        const organizationId = first.organization.id;
+        const [credentialPage, memberPage, invitationPage, auditPage] =
+          await Promise.all([
+            api.listOrganizationCredentials(session.accessToken, organizationId),
+            api.listOrganizationMembers(session.accessToken, organizationId),
+            api.listOrganizationInvitations(session.accessToken, organizationId),
+            api.listOrganizationAudit(session.accessToken, organizationId),
+          ]);
+        if (cancelled) return;
+        setCredentials(credentialPage.data);
+        setMembers(memberPage.members);
+        setInvitations(invitationPage.data);
+        setAuditLogs(auditPage.data);
+      } catch (caught) {
+        if (!cancelled) {
+          setNotice({
+            tone: "warning",
+            message:
+              caught instanceof ApiError
+                ? caught.message
+                : "Unable to load organization workspace from the API.",
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [live, session]);
+
+  async function issueCredential(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const title = String(form.get("title"));
     const referenceNo = String(form.get("referenceNo"));
-    const created: SafeCredential = {
-      ...demoCredentials[0]!,
-      id: `cred_${Date.now()}`,
-      publicId: `VD-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
-      title,
-      referenceNo,
-      issuedAt: new Date().toISOString(),
-      holder: {
-        id: `holder_${Date.now()}`,
-        email: String(form.get("holderEmail")),
-        firstName: "New",
-        lastName: "Holder",
-      },
-      claims: { outcome: "Completed" },
-    };
-    setCredentials((current) => [created, ...current]);
-    setNotice({ tone: "success", message: `${title} was issued in the fictional demo.` });
-    setActive("credentials");
+    const holderEmail = String(form.get("holderEmail"));
+    const credentialType = String(form.get("credentialType"));
+    const description = String(form.get("description") || "");
+    const issuedAtDate = String(form.get("issuedAt"));
+    const issuedAt = new Date(`${issuedAtDate}T00:00:00.000Z`).toISOString();
+
+    if (!live || !session || !membership) {
+      const created: SafeCredential = {
+        ...demoCredentials[0]!,
+        id: `cred_${Date.now()}`,
+        publicId: `VD-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+        title,
+        referenceNo,
+        issuedAt,
+        holder: {
+          id: `holder_${Date.now()}`,
+          email: holderEmail,
+          firstName: "New",
+          lastName: "Holder",
+        },
+        claims: { outcome: "Completed" },
+      };
+      setCredentials((current) => [created, ...current]);
+      setNotice({ tone: "success", message: `${title} was issued in the fictional demo.` });
+      setActive("credentials");
+      return;
+    }
+
+    try {
+      const response = await api.issueCredential(
+        session.accessToken,
+        membership.organization.id,
+        {
+          holderEmail,
+          title,
+          credentialType,
+          referenceNo,
+          issuedAt,
+          description: description || undefined,
+          claims: { outcome: "Completed" },
+        },
+      );
+      setCredentials((current) => [response.credential, ...current]);
+      setNotice({ tone: "success", message: `${title} was issued.` });
+      setActive("credentials");
+    } catch (caught) {
+      setNotice({
+        tone: "warning",
+        message:
+          caught instanceof ApiError
+            ? caught.message
+            : "Unable to issue credential.",
+      });
+    }
   }
 
-  function inviteMember(event: FormEvent<HTMLFormElement>) {
+  async function inviteMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const invitation = {
-      ...demoInvitations[0]!,
-      id: `invite_${Date.now()}`,
-      email: String(form.get("email")),
-      role: String(form.get("role")) as "ORGANIZATION_ADMIN" | "ORGANIZATION_ISSUER",
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
-      invitationUrl: "https://verifieddoc.example.test/invitations/accept#token=ONE_TIME_DEMO_TOKEN",
-    };
-    setInvitations((current) => [invitation, ...current]);
-    setNotice({ tone: "success", message: "Invitation created. Deliver the one-time URL through a trusted channel." });
+    const email = String(form.get("email"));
+    const role = String(form.get("role")) as "ORGANIZATION_ADMIN" | "ORGANIZATION_ISSUER";
+    const expiresInHours = Number(form.get("expiresInHours") || 72);
+
+    if (!live || !session || !membership) {
+      const invitation = {
+        ...demoInvitations[0]!,
+        id: `invite_${Date.now()}`,
+        email,
+        role,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString(),
+        invitationUrl: "https://verifieddoc.example.test/invitations/accept#token=ONE_TIME_DEMO_TOKEN",
+      };
+      setInvitations((current) => [invitation, ...current]);
+      setNotice({ tone: "success", message: "Invitation created. Deliver the one-time URL through a trusted channel." });
+      return;
+    }
+
+    try {
+      const response = await api.createOrganizationInvitation(
+        session.accessToken,
+        membership.organization.id,
+        { email, role, expiresInHours },
+      );
+      setInvitations((current) => [response.invitation, ...current]);
+      setNotice({
+        tone: "success",
+        message: response.invitationUrl
+          ? `Invitation created. Deliver once: ${response.invitationUrl}`
+          : "Invitation created. Deliver the one-time URL through a trusted channel.",
+      });
+    } catch (caught) {
+      setNotice({
+        tone: "warning",
+        message:
+          caught instanceof ApiError
+            ? caught.message
+            : "Unable to create invitation.",
+      });
+    }
   }
+
+  const organization = membership?.organization ?? demoOrganization;
+  const membershipRole = membership?.membershipRole;
+  const profile = live && session
+    ? session.user
+    : {
+        firstName: "Nadia",
+        lastName: "Admin",
+        email: "demo.org-admin@example.test",
+      };
+  const roleLabel = live
+    ? membershipRole === "ORGANIZATION_ISSUER"
+      ? "Organization issuer"
+      : membershipRole === "ORGANIZATION_ADMIN"
+        ? "Organization administrator"
+        : "Organization member"
+    : "Organization administrator";
 
   return (
     <AppShell
-      roleLabel="Organization administrator"
-      name="Nadia Admin"
-      email="demo.org-admin@example.test"
+      roleLabel={roleLabel}
+      name={`${profile.firstName} ${profile.lastName}`}
+      email={profile.email}
       items={items}
       active={active}
       onActive={setActive}
       onExit={onExit}
+      workspaceSwitch={
+        canOpenHolder
+          ? {
+              label: "Open holder workspace →",
+              onClick: () => navigate("/app/holder"),
+            }
+          : undefined
+      }
     >
       <div className="workspace-content">
         {notice && <NoticeBar notice={notice} onClose={() => setNotice(null)} />}
@@ -833,9 +1256,9 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
           <>
             <PageHeader
               eyebrow="Organization workspace"
-              title={demoOrganization.name}
+              title={organization.name}
               copy="Manage issuer-backed credentials through approved organization membership."
-              action={<StatusBadge status={demoOrganization.status} />}
+              action={<StatusBadge status={organization.status} />}
             />
             <div className="metric-grid">
               <MetricCard label="Credentials issued" value={credentials.length} note="All lifecycle states" />
@@ -858,12 +1281,12 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
               </article>
               <article className="content-card compact-card">
                 <p className="card-label">Organization readiness</p>
-                <div className="readiness-score"><span>92</span><small>/ 100</small></div>
-                <div className="progress-track"><i style={{ width: "92%" }} /></div>
+                <div className="readiness-score"><span>{organization.status === "VERIFIED" ? "100" : "40"}</span><small>/ 100</small></div>
+                <div className="progress-track"><i style={{ width: organization.status === "VERIFIED" ? "100%" : "40%" }} /></div>
                 <ul className="check-list">
-                  <li>✓ Organization approved</li>
-                  <li>✓ Two authorized members</li>
-                  <li>✓ Audit trail active</li>
+                  <li>{organization.status === "VERIFIED" ? "✓" : "○"} Organization approved</li>
+                  <li>{members.length > 0 ? "✓" : "○"} Authorized members present</li>
+                  <li>✓ Audit trail available via API</li>
                   <li>○ Invitation email delivery deferred</li>
                 </ul>
               </article>
@@ -893,7 +1316,7 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
         {active === "issue" && (
           <>
             <PageHeader eyebrow="New record" title="Issue a credential" copy="Issuance requires an approved organization and an authorized organization role." />
-            <form className="content-card form-card wide-form" onSubmit={issueCredential}>
+            <form className="content-card form-card wide-form" onSubmit={(event) => { void issueCredential(event); }}>
               <div className="form-section-heading"><span>01</span><div><h2>Holder and credential</h2><p>Use the email of an existing VerifiedDoc holder.</p></div></div>
               <label>Holder email<input name="holderEmail" type="email" defaultValue="new.holder@example.test" required /></label>
               <div className="field-row">
@@ -931,6 +1354,13 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
                     type="button"
                     key="action"
                     onClick={() => {
+                      if (live) {
+                        setNotice({
+                          tone: "info",
+                          message: "Use the members API DELETE route from an admin tooling flow; demo remove is disabled in live mode.",
+                        });
+                        return;
+                      }
                       if (members.length <= 1) return;
                       setMembers((current) => current.filter((item) => item.user.id !== member.user.id));
                       setNotice({ tone: "warning", message: "Member removed from the fictional organization." });
@@ -948,7 +1378,7 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
           <>
             <PageHeader eyebrow="Membership" title="Invite trusted staff" copy="Raw invitation tokens are returned once and stored only as hashes by the API." />
             <div className="two-column-form">
-              <form className="content-card form-card" onSubmit={inviteMember}>
+              <form className="content-card form-card" onSubmit={(event) => { void inviteMember(event); }}>
                 <h2>New invitation</h2>
                 <label>Email address<input name="email" type="email" defaultValue="new.issuer@example.test" required /></label>
                 <label>Organization role<select name="role"><option value="ORGANIZATION_ISSUER">Organization issuer</option><option value="ORGANIZATION_ADMIN">Organization administrator</option></select></label>
@@ -961,7 +1391,47 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
                   {invitations.map((invite) => (
                     <article className="share-row" key={invite.id}>
                       <div><StatusBadge status={invite.state} /><h3>{invite.email}</h3><p>{invite.role.replaceAll("_", " ")}. Expires {formatDate(invite.expiresAt)}.</p></div>
-                      {invite.state === "PENDING" && <button type="button" onClick={() => setInvitations((items) => items.map((item) => item.id === invite.id ? { ...item, state: "REVOKED", revokedAt: new Date().toISOString() } : item))}>Revoke</button>}
+                      {invite.state === "PENDING" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!live || !session || !membership) {
+                              setInvitations((items) =>
+                                items.map((item) =>
+                                  item.id === invite.id
+                                    ? { ...item, state: "REVOKED", revokedAt: new Date().toISOString() }
+                                    : item,
+                                ),
+                              );
+                              return;
+                            }
+                            void api
+                              .revokeOrganizationInvitation(
+                                session.accessToken,
+                                membership.organization.id,
+                                invite.id,
+                              )
+                              .then((response) => {
+                                setInvitations((items) =>
+                                  items.map((item) =>
+                                    item.id === invite.id ? response.invitation : item,
+                                  ),
+                                );
+                              })
+                              .catch((caught) => {
+                                setNotice({
+                                  tone: "warning",
+                                  message:
+                                    caught instanceof ApiError
+                                      ? caught.message
+                                      : "Unable to revoke invitation.",
+                                });
+                              });
+                          }}
+                        >
+                          Revoke
+                        </button>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -977,7 +1447,7 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
               <div className="filter-row"><input aria-label="Filter audit actions" placeholder="Filter by action or resource" /><input aria-label="Audit start date" type="date" /></div>
               <DataTable
                 headers={["Action", "Resource", "Actor", "Date"]}
-                rows={demoAuditLogs.map((log) => [
+                rows={auditLogs.map((log) => [
                   <strong key="action">{log.action.replaceAll("_", " ")}</strong>,
                   log.resourceType,
                   log.actor ? `${log.actor.firstName} ${log.actor.lastName}` : "System",
@@ -992,9 +1462,19 @@ function OrganizationWorkspace({ onExit }: { onExit: () => void }) {
   );
 }
 
-function AdminWorkspace({ onExit }: { onExit: () => void }) {
+function AdminWorkspace({
+  onExit,
+  session,
+}: {
+  onExit: () => void;
+  session: AuthSession | null;
+}) {
+  const live = !demoMode && Boolean(session);
   const [active, setActive] = useState("organizations");
-  const [organizations, setOrganizations] = useState(demoPendingOrganizations);
+  const [organizations, setOrganizations] = useState<AdminOrganization[]>(
+    demoPendingOrganizations as AdminOrganization[],
+  );
+  const [auditLogs, setAuditLogs] = useState<SafeAuditLogEntry[]>(demoAuditLogs);
   const [notice, setNotice] = useState<Notice | null>(null);
   const items = [
     { id: "organizations", label: "Organization review", icon: "▣" },
@@ -1002,33 +1482,99 @@ function AdminWorkspace({ onExit }: { onExit: () => void }) {
     { id: "readiness", label: "System readiness", icon: "✓" },
   ];
 
-  function review(id: string, decision: "VERIFIED" | "REJECTED") {
-    setOrganizations((items) =>
-      items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: decision,
-              reviewedAt: new Date().toISOString(),
-              rejectionReason:
-                decision === "REJECTED"
-                  ? "Required registration evidence was not confirmed."
-                  : null,
-            }
-          : item,
-      ),
-    );
-    setNotice({
-      tone: decision === "VERIFIED" ? "success" : "warning",
-      message: `Organization ${decision === "VERIFIED" ? "approved" : "rejected"} in the fictional demo.`,
-    });
+  useEffect(() => {
+    if (!live || !session) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [pending, audit] = await Promise.all([
+          api.listAdminOrganizations(session.accessToken, { status: "PENDING" }),
+          api.listAdminAuditLogs(session.accessToken),
+        ]);
+        if (cancelled) return;
+        setOrganizations(pending.data);
+        setAuditLogs(audit.data);
+      } catch (caught) {
+        if (!cancelled) {
+          setNotice({
+            tone: "warning",
+            message:
+              caught instanceof ApiError
+                ? caught.message
+                : "Unable to load admin workspace from the API.",
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [live, session]);
+
+  async function review(id: string, decision: "APPROVE" | "REJECT") {
+    if (!live || !session) {
+      const status = decision === "APPROVE" ? "VERIFIED" : "REJECTED";
+      setOrganizations((items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status,
+                reviewedAt: new Date().toISOString(),
+                rejectionReason:
+                  decision === "REJECT"
+                    ? "Required registration evidence was not confirmed."
+                    : null,
+              }
+            : item,
+        ),
+      );
+      setNotice({
+        tone: decision === "APPROVE" ? "success" : "warning",
+        message: `Organization ${decision === "APPROVE" ? "approved" : "rejected"} in the fictional demo.`,
+      });
+      return;
+    }
+
+    try {
+      const response = await api.reviewOrganization(session.accessToken, id, {
+        decision,
+        rejectionReason:
+          decision === "REJECT"
+            ? "Required registration evidence was not confirmed."
+            : undefined,
+      });
+      setOrganizations((items) =>
+        items.map((item) => (item.id === id ? response.organization : item)),
+      );
+      setNotice({
+        tone: decision === "APPROVE" ? "success" : "warning",
+        message: `Organization ${decision === "APPROVE" ? "approved" : "rejected"}.`,
+      });
+    } catch (caught) {
+      setNotice({
+        tone: "warning",
+        message:
+          caught instanceof ApiError
+            ? caught.message
+            : "Unable to review organization.",
+      });
+    }
   }
+
+  const profile = live && session
+    ? session.user
+    : {
+        firstName: "Platform",
+        lastName: "Admin",
+        email: "demo.platform-admin@example.test",
+      };
 
   return (
     <AppShell
       roleLabel="Platform administrator"
-      name="Platform Admin"
-      email="demo.platform-admin@example.test"
+      name={`${profile.firstName} ${profile.lastName}`}
+      email={profile.email}
       items={items}
       active={active}
       onActive={setActive}
@@ -1041,8 +1587,8 @@ function AdminWorkspace({ onExit }: { onExit: () => void }) {
             <PageHeader eyebrow="Platform operations" title="Organization applications" copy="Review issuer applications before they can create trusted credentials." />
             <div className="metric-grid">
               <MetricCard label="Pending review" value={organizations.filter((item) => item.status === "PENDING").length} note="Requires an administrator decision" tone="gold" />
-              <MetricCard label="Approved today" value={organizations.filter((item) => item.status === "VERIFIED").length} note="Demo review decisions" tone="green" />
-              <MetricCard label="Rejected today" value={organizations.filter((item) => item.status === "REJECTED").length} note="Reason required" tone="red" />
+              <MetricCard label="Approved in view" value={organizations.filter((item) => item.status === "VERIFIED").length} note={live ? "From review responses" : "Demo review decisions"} tone="green" />
+              <MetricCard label="Rejected in view" value={organizations.filter((item) => item.status === "REJECTED").length} note="Reason required" tone="red" />
               <MetricCard label="API readiness" value="Ready" note="Database connectivity confirmed" />
             </div>
             <div className="review-grid">
@@ -1061,14 +1607,15 @@ function AdminWorkspace({ onExit }: { onExit: () => void }) {
                   <p>{organization.description}</p>
                   {organization.status === "PENDING" ? (
                     <div className="review-actions">
-                      <button className="reject-button" type="button" onClick={() => review(organization.id, "REJECTED")}>Reject</button>
-                      <button className="approve-button" type="button" onClick={() => review(organization.id, "VERIFIED")}>Approve organization</button>
+                      <button className="reject-button" type="button" onClick={() => { void review(organization.id, "REJECT"); }}>Reject</button>
+                      <button className="approve-button" type="button" onClick={() => { void review(organization.id, "APPROVE"); }}>Approve organization</button>
                     </div>
                   ) : (
                     <div className="reviewed-message">Decision recorded at {formatDate(organization.reviewedAt)}</div>
                   )}
                 </article>
               ))}
+              {organizations.length === 0 && <p>No organizations in this review queue.</p>}
             </div>
           </>
         )}
@@ -1079,9 +1626,9 @@ function AdminWorkspace({ onExit }: { onExit: () => void }) {
               <div className="filter-row"><input placeholder="Action, actor, organization" aria-label="Search platform audit" /><select aria-label="Audit resource"><option>All resources</option><option>Organization</option><option>Credential</option><option>Invitation</option></select></div>
               <DataTable
                 headers={["Action", "Organization", "Resource", "Actor", "Date"]}
-                rows={demoAuditLogs.map((log) => [
+                rows={auditLogs.map((log) => [
                   <strong key="action">{log.action.replaceAll("_", " ")}</strong>,
-                  demoOrganization.name,
+                  log.organizationId ?? "—",
                   log.resourceType,
                   log.actor?.email ?? "System",
                   formatDate(log.createdAt),
@@ -1106,26 +1653,71 @@ function AdminWorkspace({ onExit }: { onExit: () => void }) {
   );
 }
 
-function VerifierWorkspace({ onExit }: { onExit: () => void }) {
+function VerifierWorkspace({
+  onExit,
+  session,
+  canOpenOrganization,
+}: {
+  onExit: () => void;
+  session: AuthSession | null;
+  canOpenOrganization: boolean;
+}) {
+  const live = !demoMode;
   const [active, setActive] = useState("verify");
-  const [token, setToken] = useState("DEMO-VERIFIED-2026");
+  const [token, setToken] = useState(demoMode ? "DEMO-VERIFIED-2026" : "");
   const [result, setResult] = useState<PublicVerificationResponse | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const items = [
     { id: "verify", label: "Verify credential", icon: "✓" },
     { id: "guidance", label: "Decision guidance", icon: "?" },
   ];
+  const profile = session?.user ?? {
+    firstName: "Victor",
+    lastName: "Employer",
+    email: "demo.verifier@example.test",
+  };
+
+  async function submitVerify(event: FormEvent) {
+    event.preventDefault();
+    setUnavailable(false);
+    try {
+      if (!live) {
+        const verified = verifyDemoToken(token);
+        setResult(verified);
+        setUnavailable(!verified);
+        return;
+      }
+      setResult(await api.verifyCredential(token));
+    } catch (caught) {
+      setResult(null);
+      setUnavailable(true);
+      if (caught instanceof ApiError) {
+        setNotice({ tone: "warning", message: caught.message });
+      }
+    }
+  }
+
   return (
     <AppShell
       roleLabel="Employer or verifier"
-      name="Victor Employer"
-      email="demo.verifier@example.test"
+      name={`${profile.firstName} ${profile.lastName}`}
+      email={profile.email}
       items={items}
       active={active}
       onActive={setActive}
       onExit={onExit}
+      workspaceSwitch={
+        canOpenOrganization
+          ? {
+              label: "Open organization workspace →",
+              onClick: () => navigate("/app/organization"),
+            }
+          : undefined
+      }
     >
       <div className="workspace-content">
+        {notice && <NoticeBar notice={notice} onClose={() => setNotice(null)} />}
         {active === "verify" ? (
           <>
             <PageHeader eyebrow="Source confirmation" title="Verify a shared credential" copy="The result confirms issuer-backed record status. It does not make the hiring decision." />
@@ -1133,14 +1725,11 @@ function VerifierWorkspace({ onExit }: { onExit: () => void }) {
               <form
                 className="content-card form-card"
                 onSubmit={(event) => {
-                  event.preventDefault();
-                  const verified = verifyDemoToken(token);
-                  setResult(verified);
-                  setUnavailable(!verified);
+                  void submitVerify(event);
                 }}
               >
                 <h2>Enter verification token</h2>
-                <p>Use the token from the holder-approved URL or scan its QR code in the mobile experience.</p>
+                <p>Use the token from the holder-approved URL or scan its QR code in the mobile experience. Live mode calls GET /verify/:token.</p>
                 <label>Verification token<input value={token} onChange={(event) => setToken(event.target.value)} /></label>
                 <button className="workspace-primary" type="submit">Check record</button>
                 <div className="safe-failure-note">Unknown, expired, revoked, and exhausted links all return the same generic unavailable state.</div>
@@ -1163,9 +1752,19 @@ function VerifierWorkspace({ onExit }: { onExit: () => void }) {
   );
 }
 
-function InvitationAcceptPage({ onExit }: { onExit: () => void }) {
+function InvitationAcceptPage({
+  onExit,
+  session,
+  onAccepted,
+}: {
+  onExit: () => void;
+  session: AuthSession | null;
+  onAccepted?: () => void | Promise<void>;
+}) {
   const [token, setToken] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -1176,6 +1775,33 @@ function InvitationAcceptPage({ onExit }: { onExit: () => void }) {
     }
   }, []);
 
+  async function accept() {
+    if (!token) return;
+    if (demoMode || !session) {
+      if (!session && !demoMode) {
+        setError("Sign in first, then reopen the invitation link. Accept requires a Bearer token.");
+        return;
+      }
+      setAccepted(true);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await api.acceptInvitation(session.accessToken, { token });
+      await onAccepted?.();
+      setAccepted(true);
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Unable to accept invitation.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="simple-page">
       <header><Brand /><button type="button" onClick={onExit}>Back home</button></header>
@@ -1185,12 +1811,19 @@ function InvitationAcceptPage({ onExit }: { onExit: () => void }) {
         <h1>{accepted ? "Invitation accepted" : "Join an issuing organization"}</h1>
         <p>
           {accepted
-            ? "Your fictional organization membership is ready."
+            ? demoMode
+              ? "Your fictional organization membership is ready."
+              : "Your organization membership is ready."
             : token
               ? "The token was read from the URL fragment and removed from browser history."
               : "No invitation token was found. Ask the organization administrator for a new link."}
         </p>
-        {!accepted && token && <button className="primary-button" type="button" onClick={() => setAccepted(true)}>Accept invitation</button>}
+        {error && <p className="form-error">{error}</p>}
+        {!accepted && token && (
+          <button className="primary-button" type="button" disabled={loading} onClick={() => { void accept(); }}>
+            {loading ? "Accepting…" : "Accept invitation"}
+          </button>
+        )}
         {accepted && <button className="primary-button" type="button" onClick={() => navigate("/app/organization")}>Open organization workspace</button>}
       </section>
     </div>
@@ -1270,36 +1903,134 @@ export function App() {
   const pathname = usePathname();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [demoRole, setDemoRole] = useState<DemoRole | null>(null);
+  const [memberships, setMemberships] = useState<OrganizationMembershipView[]>([]);
 
-  const currentRole = useMemo<DemoRole | null>(
-    () => demoRole ?? session?.user.role ?? null,
-    [demoRole, session],
+  const orgAccessFromMembership = useMemo(
+    () => hasOrganizationWorkspaceAccess(memberships),
+    [memberships],
   );
+  const canAccessHolder =
+    demoRole === "HOLDER" || session?.user.role === "HOLDER";
+  const canAccessVerifier =
+    demoRole === "VERIFIER" || session?.user.role === "VERIFIER";
+  const canAccessAdmin =
+    demoRole === "PLATFORM_ADMIN" || session?.user.role === "PLATFORM_ADMIN";
+  const canAccessOrganization =
+    demoRole === "ORGANIZATION_ADMIN" || orgAccessFromMembership;
 
   function openDemo(role: DemoRole) {
     setSession(null);
+    setMemberships([]);
     setDemoRole(role);
     navigate(routeForRole(role));
   }
 
-  function acceptSession(nextSession: AuthSession) {
+  async function acceptSession(nextSession: AuthSession) {
     setDemoRole(null);
     setSession(nextSession);
-    navigate(routeForRole(nextSession.user.role));
+    setMemberships([]);
+
+    if (!demoMode) {
+      try {
+        const response = await api.listOrganizations(nextSession.accessToken);
+        setMemberships(response.organizations);
+      } catch {
+        // Membership load failure must not block platform-role routing.
+        setMemberships([]);
+      }
+    }
+
+    // Organization roles come only from OrganizationMembershipView, never PlatformRole.
+    navigate(routeForPlatformRole(nextSession.user.role));
   }
 
-  function exit() {
+  async function exit() {
+    const refreshToken = session?.refreshToken;
     setSession(null);
     setDemoRole(null);
+    setMemberships([]);
+    if (!demoMode && refreshToken) {
+      try {
+        await api.logout(refreshToken);
+      } catch {
+        // Local session is already cleared; ignore logout transport failures.
+      }
+    }
     navigate("/");
   }
 
   if (pathname.startsWith("/verify")) return <PublicVerificationPage />;
-  if (pathname === "/invitations/accept") return <InvitationAcceptPage onExit={exit} />;
-  if (pathname === "/auth") return <AuthPage onSession={acceptSession} onDemo={openDemo} />;
-  if (pathname === "/app/holder" && currentRole) return <HolderWorkspace onExit={exit} />;
-  if (pathname === "/app/organization" && currentRole) return <OrganizationWorkspace onExit={exit} />;
-  if (pathname === "/app/verifier" && currentRole) return <VerifierWorkspace onExit={exit} />;
-  if (pathname === "/app/admin" && currentRole) return <AdminWorkspace onExit={exit} />;
+  if (pathname === "/invitations/accept") {
+    return (
+      <InvitationAcceptPage
+        onExit={() => {
+          void exit();
+        }}
+        session={session}
+        onAccepted={async () => {
+          if (!session || demoMode) return;
+          try {
+            const response = await api.listOrganizations(session.accessToken);
+            setMemberships(response.organizations);
+          } catch {
+            setMemberships([]);
+          }
+        }}
+      />
+    );
+  }
+  if (pathname === "/auth") {
+    return (
+      <AuthPage
+        onSession={(next) => {
+          void acceptSession(next);
+        }}
+        onDemo={openDemo}
+      />
+    );
+  }
+  if (pathname === "/app/holder" && canAccessHolder) {
+    return (
+      <HolderWorkspace
+        onExit={() => {
+          void exit();
+        }}
+        session={session}
+        canOpenOrganization={canAccessOrganization}
+      />
+    );
+  }
+  if (pathname === "/app/organization" && canAccessOrganization) {
+    return (
+      <OrganizationWorkspace
+        onExit={() => {
+          void exit();
+        }}
+        session={session}
+        canOpenHolder={canAccessHolder}
+      />
+    );
+  }
+  if (pathname === "/app/verifier" && canAccessVerifier) {
+    return (
+      <VerifierWorkspace
+        onExit={() => {
+          void exit();
+        }}
+        session={session}
+        canOpenOrganization={canAccessOrganization}
+      />
+    );
+  }
+  if (pathname === "/app/admin" && canAccessAdmin) {
+    return (
+      <AdminWorkspace
+        onExit={() => {
+          void exit();
+        }}
+        session={session}
+      />
+    );
+  }
   return <LandingPage onDemo={openDemo} />;
 }

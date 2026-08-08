@@ -40,62 +40,68 @@ export async function seedDemoData(input: DemoSeedInput): Promise<DemoSeedSummar
     update: {
       firstName: "Demo",
       lastName: "PlatformAdmin",
-      role: PlatformRole.PLATFORM_ADMIN
+      role: PlatformRole.PLATFORM_ADMIN,
+      emailVerifiedAt: now
     },
     create: {
       email: DEMO_ACCOUNTS.platformAdmin,
       passwordHash,
       firstName: "Demo",
       lastName: "PlatformAdmin",
-      role: PlatformRole.PLATFORM_ADMIN
+      role: PlatformRole.PLATFORM_ADMIN,
+      emailVerifiedAt: now
     }
   });
 
   const orgAdmin = await prisma.user.upsert({
     where: { email: DEMO_ACCOUNTS.orgAdmin },
-    update: { firstName: "Demo", lastName: "OrgAdmin", role: PlatformRole.HOLDER },
+    update: { firstName: "Demo", lastName: "OrgAdmin", role: PlatformRole.HOLDER, emailVerifiedAt: now },
     create: {
       email: DEMO_ACCOUNTS.orgAdmin,
       passwordHash,
       firstName: "Demo",
       lastName: "OrgAdmin",
-      role: PlatformRole.HOLDER
+      role: PlatformRole.HOLDER,
+      emailVerifiedAt: now
     }
   });
 
   const issuer = await prisma.user.upsert({
     where: { email: DEMO_ACCOUNTS.issuer },
-    update: { firstName: "Demo", lastName: "Issuer", role: PlatformRole.HOLDER },
+    update: { firstName: "Demo", lastName: "Issuer", role: PlatformRole.HOLDER, emailVerifiedAt: now },
     create: {
       email: DEMO_ACCOUNTS.issuer,
       passwordHash,
       firstName: "Demo",
       lastName: "Issuer",
-      role: PlatformRole.HOLDER
+      role: PlatformRole.HOLDER,
+      emailVerifiedAt: now
     }
   });
 
   const holder = await prisma.user.upsert({
     where: { email: DEMO_ACCOUNTS.holder },
-    update: { firstName: "Demo", lastName: "Holder", role: PlatformRole.HOLDER },
+    update: { firstName: "Demo", lastName: "Holder", role: PlatformRole.HOLDER, emailVerifiedAt: now },
     create: {
       email: DEMO_ACCOUNTS.holder,
       passwordHash,
       firstName: "Demo",
       lastName: "Holder",
-      role: PlatformRole.HOLDER
+      role: PlatformRole.HOLDER,
+      emailVerifiedAt: now
     }
   });
 
   await prisma.user.upsert({
     where: { email: DEMO_ACCOUNTS.verifier },
-    update: { firstName: "Demo", lastName: "Verifier", role: PlatformRole.VERIFIER },
+    update: { firstName: "Demo", lastName: "Verifier", role: PlatformRole.VERIFIER, emailVerifiedAt: now },
     create: {
       email: DEMO_ACCOUNTS.verifier,
       passwordHash,
       firstName: "Demo",
       lastName: "Verifier",
-      role: PlatformRole.VERIFIER
+      role: PlatformRole.VERIFIER,
+      emailVerifiedAt: now
     }
   });
 

@@ -101,3 +101,20 @@ export const CREDENTIAL_ISSUER_ROLES = [
   OrganizationRole.ORGANIZATION_ADMIN,
   OrganizationRole.ORGANIZATION_ISSUER
 ] as const;
+
+const CREDENTIAL_ARTIFACT_MAX_BYTES = 10 * 1024 * 1024;
+const CREDENTIAL_ARTIFACT_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png"
+] as const;
+
+export const credentialArtifactUploadUrlSchema = z
+  .object({
+    originalFileName: z.string().trim().min(1).max(255),
+    mimeType: z.enum(CREDENTIAL_ARTIFACT_MIME_TYPES),
+    sizeBytes: z.number().int().positive().max(CREDENTIAL_ARTIFACT_MAX_BYTES)
+  })
+  .strict();
+
+export type CredentialArtifactUploadUrlInput = z.infer<typeof credentialArtifactUploadUrlSchema>;

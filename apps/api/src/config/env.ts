@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const DEFAULT_ACCESS_SECRET = "development-access-secret-change-me-now";
 const DEFAULT_REFRESH_SECRET = "development-refresh-secret-change-me-now";
+const DEFAULT_EMAIL_VERIFICATION_SECRET = "development-email-verification-secret-change-me";
 const DEFAULT_DATABASE_URL = "postgresql://verifieddoc:verifieddoc@localhost:5432/verifieddoc";
 const DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://localhost:8081";
 const DEFAULT_PUBLIC_WEB_URL = "http://localhost:3000";
@@ -119,7 +120,31 @@ export function createEnvSchema() {
       JWT_ACCESS_SECRET: z.string().min(32).default(DEFAULT_ACCESS_SECRET),
       JWT_REFRESH_SECRET: z.string().min(32).default(DEFAULT_REFRESH_SECRET),
       CORS_ORIGINS: z.string().default(DEFAULT_CORS_ORIGINS),
-      PUBLIC_WEB_URL: z.string().default(DEFAULT_PUBLIC_WEB_URL)
+      PUBLIC_WEB_URL: z.string().default(DEFAULT_PUBLIC_WEB_URL),
+      TERMS_VERSION: z.string().min(1).default("1.0"),
+      PRIVACY_VERSION: z.string().min(1).default("1.0"),
+      PASSWORD_RESET_ENABLED: z
+        .enum(["true", "false"])
+        .default("true")
+        .transform((value) => value === "true"),
+      PASSWORD_RESET_SECRET: z.string().min(32).default(DEFAULT_ACCESS_SECRET),
+      EMAIL_VERIFICATION_ENABLED: z
+        .enum(["true", "false"])
+        .default("true")
+        .transform((value) => value === "true"),
+      EMAIL_VERIFICATION_SECRET: z.string().min(32).default(DEFAULT_EMAIL_VERIFICATION_SECRET),
+      EMAIL_VERIFICATION_OTP_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+      EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().nonnegative().default(60),
+      EMAIL_VERIFICATION_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+      RESEND_API_KEY: z.string().optional(),
+      MAIL_FROM: z.string().email().optional(),
+      DOCUMENT_UPLOADS_ENABLED: z
+        .enum(["true", "false"])
+        .default("false")
+        .transform((value) => value === "true"),
+      SUPABASE_URL: z.string().url().optional(),
+      SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+      SUPABASE_STORAGE_BUCKET: z.string().optional()
     })
     .superRefine((value, context) => {
       validatePublicWebUrl(value.PUBLIC_WEB_URL, context);
@@ -127,6 +152,19 @@ export function createEnvSchema() {
       const origins = parseCorsOrigins(value.CORS_ORIGINS);
       for (const [index, origin] of origins.entries()) {
         validateCorsOrigin(origin, context, ["CORS_ORIGINS", index]);
+      }
+
+      if (
+        value.EMAIL_VERIFICATION_SECRET === value.JWT_ACCESS_SECRET ||
+        value.EMAIL_VERIFICATION_SECRET === value.JWT_REFRESH_SECRET ||
+        value.EMAIL_VERIFICATION_SECRET === value.PASSWORD_RESET_SECRET
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "EMAIL_VERIFICATION_SECRET must not equal JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, or PASSWORD_RESET_SECRET",
+          path: ["EMAIL_VERIFICATION_SECRET"]
+        });
       }
 
       if (value.NODE_ENV !== "production") {
@@ -165,6 +203,30 @@ export function createEnvSchema() {
           code: z.ZodIssueCode.custom,
           message: "Production requires explicit JWT_ACCESS_SECRET and JWT_REFRESH_SECRET values",
           path: ["JWT_ACCESS_SECRET"]
+        });
+      }
+
+      if (
+        value.PASSWORD_RESET_ENABLED &&
+        value.PASSWORD_RESET_SECRET === DEFAULT_ACCESS_SECRET
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Production requires an explicit PASSWORD_RESET_SECRET when password reset is enabled",
+          path: ["PASSWORD_RESET_SECRET"]
+        });
+      }
+
+      if (
+        value.EMAIL_VERIFICATION_ENABLED &&
+        value.EMAIL_VERIFICATION_SECRET === DEFAULT_EMAIL_VERIFICATION_SECRET
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Production requires an explicit EMAIL_VERIFICATION_SECRET when email verification is enabled",
+          path: ["EMAIL_VERIFICATION_SECRET"]
         });
       }
 
